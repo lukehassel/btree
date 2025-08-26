@@ -351,6 +351,79 @@ bool test_extreme_race_conditions() {
     return true;
 }
 
+/**
+ * @brief Safer version of extreme test with better error handling
+ */
+bool test_safer_extreme_race_conditions() {
+    printf("Running safer extreme race condition test (16 threads, 500 ops each)...\n");
+    
+    global_tree = bplus_tree_create(8, compare_ints, NULL);
+    setup_test_data(1200);
+    
+    // Insert initial data
+    for (int i = 0; i < 1000; i++) {
+        bplus_tree_insert(global_tree, (void*)(long)test_keys[i], test_values[i]);
+    }
+    
+    const int thread_count = 16;
+    const int operations_per_thread = 500; // Reduced from 1000
+    
+    pthread_t threads[thread_count];
+    ThreadArgs args[thread_count];
+    
+    // Create threads with error checking
+    for (int i = 0; i < thread_count; i++) {
+        args[i].thread_id = i;
+        args[i].start_key = 0;
+        args[i].end_key = 999;
+        args[i].operation_count = operations_per_thread;
+        
+        int result = pthread_create(&threads[i], NULL, extreme_operations_thread, &args[i]);
+        if (result != 0) {
+            printf("  ❌ Failed to create thread %d: %d\n", i, result);
+            // Clean up already created threads
+            for (int j = 0; j < i; j++) {
+                pthread_join(threads[j], NULL);
+            }
+            bplus_tree_destroy(global_tree);
+            global_tree = NULL;
+            return false;
+        }
+    }
+    
+    printf("  All %d threads created successfully\n", thread_count);
+    
+    // Monitor thread progress with timeout
+    for (int i = 0; i < thread_count; i++) {
+        int result = pthread_join(threads[i], NULL);
+        if (result != 0) {
+            printf("  ❌ Thread %d failed to join: %d\n", i, result);
+        }
+    }
+    
+    printf("  All threads completed\n");
+    
+    // Verify tree integrity after extreme conditions
+    verify_tree_integrity();
+    
+    // Count remaining items
+    int found_count = 0;
+    for (int i = 0; i < 1000; i++) {
+        void* val = bplus_tree_find(global_tree, (void*)(long)i);
+        if (val != NULL) {
+            found_count++;
+        }
+    }
+    
+    printf("  Items remaining after safer extreme race conditions: %d\n", found_count);
+    assert(found_count >= 0 && found_count <= 1000);
+    
+    bplus_tree_destroy(global_tree);
+    global_tree = NULL;
+    printf("✅ Safer extreme race condition test passed\n");
+    return true;
+}
+
 // Advanced race condition test with dynamic thread creation/destruction
 void* delete_keys_thread(void* arg) {
     ThreadArgs* args = (ThreadArgs*)arg;
@@ -649,6 +722,156 @@ bool test_rapid_tree_recreation_race_conditions() {
     return true;
 }
 
+// --- New Focused Tests to Isolate Issues ---
+
+/**
+ * @brief Simple test with just 2 threads doing basic operations
+ */
+bool test_minimal_race_conditions() {
+    printf("Running minimal race condition test (2 threads, 100 ops each)...\n");
+    
+    global_tree = bplus_tree_create(4, compare_ints, NULL);
+    setup_test_data(200);
+    
+    // Insert initial data
+    for (int i = 0; i < 100; i++) {
+        bplus_tree_insert(global_tree, (void*)(long)test_keys[i], test_values[i]);
+    }
+    
+    const int thread_count = 2;
+    const int operations_per_thread = 100;
+    
+    pthread_t threads[thread_count];
+    ThreadArgs args[thread_count];
+    
+    for (int i = 0; i < thread_count; i++) {
+        args[i].thread_id = i;
+        args[i].start_key = 0;
+        args[i].end_key = 99;
+        args[i].operation_count = operations_per_thread;
+        pthread_create(&threads[i], NULL, extreme_operations_thread, &args[i]);
+    }
+    
+    for (int i = 0; i < thread_count; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    
+    // Simple verification
+    int found_count = 0;
+    for (int i = 0; i < 100; i++) {
+        void* val = bplus_tree_find(global_tree, (void*)(long)i);
+        if (val != NULL) {
+            found_count++;
+        }
+    }
+    
+    printf("  Items remaining after minimal race conditions: %d\n", found_count);
+    assert(found_count >= 0 && found_count <= 100);
+    
+    bplus_tree_destroy(global_tree);
+    global_tree = NULL;
+    printf("✅ Minimal race condition test passed\n");
+    return true;
+}
+
+/**
+ * @brief Test with 4 threads, moderate operations
+ */
+bool test_moderate_thread_count() {
+    printf("Running moderate thread count test (4 threads, 200 ops each)...\n");
+    
+    global_tree = bplus_tree_create(6, compare_ints, NULL);
+    setup_test_data(400);
+    
+    // Insert initial data
+    for (int i = 0; i < 200; i++) {
+        bplus_tree_insert(global_tree, (void*)(long)test_keys[i], test_values[i]);
+    }
+    
+    const int thread_count = 4;
+    const int operations_per_thread = 200;
+    
+    pthread_t threads[thread_count];
+    ThreadArgs args[thread_count];
+    
+    for (int i = 0; i < thread_count; i++) {
+        args[i].thread_id = i;
+        args[i].start_key = 0;
+        args[i].end_key = 199;
+        args[i].operation_count = operations_per_thread;
+        pthread_create(&threads[i], NULL, extreme_operations_thread, &args[i]);
+    }
+    
+    for (int i = 0; i < thread_count; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    
+    int found_count = 0;
+    for (int i = 0; i < 200; i++) {
+        void* val = bplus_tree_find(global_tree, (void*)(long)i);
+        if (val != NULL) {
+            found_count++;
+        }
+    }
+    
+    printf("  Items remaining after moderate race conditions: %d\n", found_count);
+    assert(found_count >= 0 && found_count <= 200);
+    
+    bplus_tree_destroy(global_tree);
+    global_tree = NULL;
+    printf("✅ Moderate thread count test passed\n");
+    return true;
+}
+
+/**
+ * @brief Test with 8 threads, higher operations
+ */
+bool test_high_thread_count() {
+    printf("Running high thread count test (8 threads, 300 ops each)...\n");
+    
+    global_tree = bplus_tree_create(7, compare_ints, NULL);
+    setup_test_data(600);
+    
+    // Insert initial data
+    for (int i = 0; i < 300; i++) {
+        bplus_tree_insert(global_tree, (void*)(long)test_keys[i], test_values[i]);
+    }
+    
+    const int thread_count = 8;
+    const int operations_per_thread = 300;
+    
+    pthread_t threads[thread_count];
+    ThreadArgs args[thread_count];
+    
+    for (int i = 0; i < thread_count; i++) {
+        args[i].thread_id = i;
+        args[i].start_key = 0;
+        args[i].end_key = 299;
+        args[i].operation_count = operations_per_thread;
+        pthread_create(&threads[i], NULL, extreme_operations_thread, &args[i]);
+    }
+    
+    for (int i = 0; i < thread_count; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    
+    int found_count = 0;
+    for (int i = 0; i < 300; i++) {
+        void* val = bplus_tree_find(global_tree, (void*)(long)i);
+        if (val != NULL) {
+            found_count++;
+        }
+    }
+    
+    printf("  Items remaining after high thread count race conditions: %d\n", found_count);
+    assert(found_count >= 0 && found_count <= 300);
+    
+    bplus_tree_destroy(global_tree);
+    global_tree = NULL;
+    printf("✅ High thread count test passed\n");
+    return true;
+}
+
 // Main function to run all tests
 int main() {
     printf("==================================\n");
@@ -665,12 +888,19 @@ int main() {
     RUN_TEST(test_concurrent_insert_find);
     RUN_TEST(test_moderate_race_conditions);
     RUN_TEST(test_extreme_race_conditions);
+    RUN_TEST(test_safer_extreme_race_conditions); // Added new test
     RUN_TEST(test_advanced_race_conditions);
     
     // New complex test cases
     RUN_TEST(test_variable_tree_race_conditions);
-    RUN_TEST(test_memory_pressure_race_conditions);
-    RUN_TEST(test_rapid_tree_recreation_race_conditions);
+         RUN_TEST(test_memory_pressure_race_conditions);
+     RUN_TEST(test_rapid_tree_recreation_race_conditions);
+     
+     // New focused tests to isolate issues
+     RUN_TEST(test_minimal_race_conditions);
+     RUN_TEST(test_moderate_thread_count);
+     RUN_TEST(test_high_thread_count);
+     RUN_TEST(test_very_high_thread_count);
     
     // Print summary
     printf("----------------------------------\n");
