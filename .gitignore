@@ -1,0 +1,29 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+
+# Test executables
+tests/*_test
+tests/*_tests
+tests/*.dSYM/
+
+# Output files
+output/
+tests/output/
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
