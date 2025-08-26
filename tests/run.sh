@@ -138,7 +138,7 @@ main() {
     # Test 1: Basic Test Suite
     print_section "📋 Basic Test Suite"
     
-    if compile_test "Basic Tests" "btree_test.c test_utils.c ../btree.c ../btree_viz.c" "btree_test"; then
+    if compile_test "Basic Tests" "btree_test.c test_utils.c ../btree.c" "btree_test"; then
         if run_test_suite "Basic Tests" "btree_test" "Running core functionality tests..."; then
             test_results+=("Basic Tests: ✅ PASSED")
         else
@@ -153,7 +153,7 @@ main() {
     # Test 2: Race Condition Tests
     print_section "🏃 Race Condition Tests"
     
-    if compile_test "Race Condition Tests" "btree_race_condition_tests.c test_utils.c ../btree.c ../btree_viz.c -lpthread" "btree_race_condition_tests"; then
+    if compile_test "Race Condition Tests" "btree_race_condition_tests.c test_utils.c ../btree.c -lpthread" "btree_race_condition_tests"; then
         if run_test_suite "Race Condition Tests" "btree_race_condition_tests" "Running race condition and concurrency tests..."; then
             test_results+=("Race Condition Tests: ✅ PASSED")
         else

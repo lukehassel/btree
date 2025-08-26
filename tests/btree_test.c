@@ -13,8 +13,8 @@
  // #include <omp.h>  // OpenMP not available on macOS by default
  
  // Include the B+ Tree header file
-#include "btree.h"
-#include "btree_viz.h"
+#include "../btree.h"
+#include "test_utils.h"
  
  // --- Test Harness Setup ---
  
@@ -36,26 +36,10 @@
  
  // --- Test Data Setup ---
  
- // We'll use integer keys and string values for most tests.
- int* test_keys[1000];
- char* test_values[1000];
+// We'll use integer keys and string values for most tests.
+// These are defined in test_utils.h
  
- void setup_test_data(int count) {
-     for (int i = 0; i < count; i++) {
-         test_keys[i] = malloc(sizeof(int));
-         *test_keys[i] = i;
-         
-         test_values[i] = malloc(20 * sizeof(char));
-         sprintf(test_values[i], "Value-%d", i);
-     }
- }
- 
- void teardown_test_data(int count) {
-     for (int i = 0; i < count; i++) {
-         free(test_keys[i]);
-         // Values are freed by the tree's destroyer
-     }
- }
+
  
  // --- Test Cases ---
  
@@ -298,7 +282,7 @@ bool test_concurrent_insert_and_find() {
  * @brief Tests insertion order effects on tree structure.
  */
 bool test_insertion_order() {
-    BPlusTree *tree = bplus_tree_create(4, compare_ints, destroy_string_value);
+    BPlusTree *tree = bplus_tree_create(4, compare_ints, NULL);
     setup_test_data(10);
     
     // Insert in ascending order
@@ -316,7 +300,7 @@ bool test_insertion_order() {
     bplus_tree_destroy(tree);
     
     // Test with descending order
-    tree = bplus_tree_create(4, compare_ints, destroy_string_value);
+    tree = bplus_tree_create(4, compare_ints, NULL);
     for (int i = 9; i >= 0; i--) {
         bplus_tree_insert(tree, test_keys[i], test_values[i]);
     }
@@ -328,7 +312,7 @@ bool test_insertion_order() {
     free(results);
     
     bplus_tree_destroy(tree);
-    // Don't call teardown - tree destroy handles cleanup
+    teardown_test_data(10);
     return true;
 }
 
@@ -363,7 +347,7 @@ bool test_memory_leaks() {
         assert(bplus_tree_find(tree, test_keys[3]) == NULL);
         
         bplus_tree_destroy(tree);
-        // Don't call teardown - tree destroy handles cleanup
+        teardown_test_data(5);
     }
     
     // Test 2: Large tree operations
@@ -391,7 +375,7 @@ bool test_memory_leaks() {
     assert(bplus_tree_find(large_tree, test_keys[20]) == NULL);
     
     bplus_tree_destroy(large_tree);
-    // Don't call teardown - tree destroy handles cleanup
+    teardown_test_data(100);
     
     printf("Simple memory leak test completed successfully!\n");
     return true;
