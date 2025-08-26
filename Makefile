@@ -16,22 +16,19 @@ OBJDIR = obj
 
 # Source files
 BTREE_SRC = $(SRCDIR)/btree.c
-BTREE_UNIFIED_SRC = $(SRCDIR)/btree_unified.c
 BTREE_SIMD_SRC = $(SRCDIR)/btree_simd.c
 TEST_UTILS_SRC = $(TESTDIR)/test_utils.c
 
 # Object files
 BTREE_OBJ = $(OBJDIR)/btree.o
-BTREE_UNIFIED_OBJ = $(OBJDIR)/btree_unified.o
 BTREE_SIMD_OBJ = $(OBJDIR)/btree_simd.o
 TEST_UTILS_OBJ = $(OBJDIR)/test_utils.o
 
 # Executables
 BTREE_TEST = $(TESTDIR)/btree_test
-BTREE_UNIFIED_TEST = $(TESTDIR)/btree_unified_test
 BTREE_SIMD_TEST = $(TESTDIR)/btree_simd_test
 BTREE_SIMD_VS_PTHREAD_TEST = $(TESTDIR)/btree_simd_vs_pthread_test
-BTREE_PERF_COMPARISON = $(TESTDIR)/btree_performance_comparison
+
 BTREE_SIMPLE_PERF_TEST = $(TESTDIR)/btree_simple_performance_test
 BTREE_BASIC_PERF_TEST = $(TESTDIR)/btree_basic_performance_test
 BTREE_SAFE_PERF_TEST = $(TESTDIR)/btree_safe_performance_test
@@ -49,9 +46,7 @@ $(BTREE_OBJ): $(BTREE_SRC) | $(OBJDIR)
 
 
 
-# Compile unified B+ tree
-$(BTREE_UNIFIED_OBJ): $(BTREE_UNIFIED_SRC) | $(OBJDIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+
 
 # Compile SIMD B+ tree
 $(BTREE_SIMD_OBJ): $(BTREE_SIMD_SRC) | $(OBJDIR)
@@ -75,9 +70,7 @@ $(BTREE_SIMD_VS_PTHREAD_TEST): $(BTREE_SIMD_OBJ) $(BTREE_OBJ) $(TEST_UTILS_OBJ)
 
 
 
-# Link performance comparison test
-$(BTREE_PERF_COMPARISON): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_performance_comparison.c $^ $(LDFLAGS)
+
 
 # Link simple performance test
 $(BTREE_SIMPLE_PERF_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
@@ -93,9 +86,7 @@ $(BTREE_SAFE_PERF_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
 
 
 
-# Link unified test (if needed)
-$(BTREE_UNIFIED_TEST): $(BTREE_OBJ) $(BTREE_UNIFIED_OBJ) $(TEST_UTILS_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_unified_test.c $^ $(LDFLAGS)
+
 
 # Test targets
 test: $(BTREE_TEST) $(BTREE_SIMD_TEST)
@@ -142,7 +133,7 @@ test-simd-vs-pthread: $(BTREE_SIMD_VS_PTHREAD_TEST)
 # Clean target
 clean:
 	rm -rf $(OBJDIR)
-	rm -f $(BTREE_TEST) $(BTREE_SIMD_TEST) $(BTREE_UNIFIED_TEST) $(BTREE_PERF_COMPARISON)
+	rm -f $(BTREE_TEST) $(BTREE_SIMD_TEST)
 	rm -rf $(TESTDIR)/*.dSYM
 	rm -f $(TESTDIR)/*.o
 
