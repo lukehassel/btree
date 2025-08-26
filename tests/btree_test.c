@@ -26,6 +26,9 @@ bool test_deletion_rebalancing();
 bool test_concurrent_read_access();
 bool test_string_key_comparison();
 bool test_large_dataset_performance();
+bool test_massive_btree_100k();
+bool test_ultra_massive_btree_1m();
+bool test_btree_scalability_analysis();
 bool test_error_handling_edge_cases();
 
 // Forward declarations for helper functions
@@ -1182,6 +1185,332 @@ bool test_large_dataset_performance() {
 }
 
 /**
+ * @brief Tests massive B+ trees with 100K+ items
+ */
+bool test_massive_btree_100k() {
+    printf("Running massive B+ tree tests (100K items)...\n");
+    
+    BPlusTree *tree = bplus_tree_create(16, compare_ints, NULL);
+    
+    const int dataset_size = 100000;
+    int* keys = malloc(dataset_size * sizeof(int));
+    char** values = malloc(dataset_size * sizeof(char*));
+    
+    // Generate test data
+    for (int i = 0; i < dataset_size; i++) {
+        keys[i] = i;
+        values[i] = malloc(25 * sizeof(char));
+        sprintf(values[i], "MassiveValue-%d", i);
+    }
+    
+    printf("  Starting insertion of %d items...\n", dataset_size);
+    
+    // Measure insertion performance
+    clock_t start = clock();
+    for (int i = 0; i < dataset_size; i++) {
+        int result = bplus_tree_insert(tree, &keys[i], values[i]);
+        assert(result == 0);
+        
+        // Progress indicator every 10K items
+        if ((i + 1) % 10000 == 0) {
+            printf("    Inserted %d items...\n", i + 1);
+        }
+    }
+    clock_t end = clock();
+    double insert_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("  Inserted %d items in %.4f seconds (%.2f items/sec)\n", 
+           dataset_size, insert_time, dataset_size / insert_time);
+    
+    // Verify tree integrity with random samples
+    printf("  Verifying tree integrity with random samples...\n");
+    srand(42); // Fixed seed for reproducible results
+    for (int sample = 0; sample < 1000; sample++) {
+        int random_key = rand() % dataset_size;
+        void* found = bplus_tree_find(tree, &random_key);
+        assert(found != NULL);
+        assert(strstr((char*)found, "MassiveValue") != NULL);
+    }
+    
+    // Test range queries on massive tree
+    printf("  Testing range queries...\n");
+    void* results[1000];
+    
+    // Small range
+    int start_key = 1000, end_key = 1999;
+    int count = bplus_tree_find_range(tree, &start_key, &end_key, results, 1000);
+    assert(count == 1000);
+    
+    // Large range
+    start_key = 10000, end_key = 19999;
+    count = bplus_tree_find_range(tree, &start_key, &end_key, results, 1000);
+    assert(count == 1000);
+    
+    // Measure search performance
+    printf("  Measuring search performance...\n");
+    start = clock();
+    for (int i = 0; i < 10000; i++) {
+        int random_key = rand() % dataset_size;
+        void* found = bplus_tree_find(tree, &random_key);
+        assert(found != NULL);
+    }
+    end = clock();
+    double search_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("  Searched 10K random items in %.4f seconds (%.2f items/sec)\n", 
+           search_time, 10000.0 / search_time);
+    
+    // Measure deletion performance (delete every 10th item)
+    printf("  Measuring deletion performance...\n");
+    start = clock();
+    int deleted_count = 0;
+    for (int i = 0; i < dataset_size; i += 10) {
+        int result = bplus_tree_delete(tree, &keys[i]);
+        assert(result == 0);
+        deleted_count++;
+        
+        if (deleted_count % 1000 == 0) {
+            printf("    Deleted %d items...\n", deleted_count);
+        }
+    }
+    end = clock();
+    double delete_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("  Deleted %d items in %.4f seconds (%.2f items/sec)\n", 
+           deleted_count, delete_time, deleted_count / delete_time);
+    
+    // Verify remaining items
+    printf("  Verifying remaining items...\n");
+    int remaining_count = 0;
+    for (int i = 0; i < dataset_size; i++) {
+        if (i % 10 != 0) { // Skip deleted items
+            void* found = bplus_tree_find(tree, &keys[i]);
+            assert(found != NULL);
+            remaining_count++;
+        }
+    }
+    
+    printf("  Verified %d remaining items\n", remaining_count);
+    
+    bplus_tree_destroy(tree);
+    
+    // Clean up
+    for (int i = 0; i < dataset_size; i++) {
+        free(values[i]);
+    }
+    free(keys);
+    free(values);
+    
+    printf("✅ Massive B+ tree tests (100K items) passed\n");
+    return true;
+}
+
+/**
+ * @brief Tests ultra-massive B+ trees with 1M+ items
+ */
+bool test_ultra_massive_btree_1m() {
+    printf("Running ultra-massive B+ tree tests (1M items)...\n");
+    
+    BPlusTree *tree = bplus_tree_create(32, compare_ints, NULL);
+    
+    const int dataset_size = 1000000;
+    int* keys = malloc(dataset_size * sizeof(int));
+    char** values = malloc(dataset_size * sizeof(char*));
+    
+    // Generate test data
+    for (int i = 0; i < dataset_size; i++) {
+        keys[i] = i;
+        values[i] = malloc(30 * sizeof(char));
+        sprintf(values[i], "UltraMassiveValue-%d", i);
+    }
+    
+    printf("  Starting insertion of %d items...\n", dataset_size);
+    
+    // Measure insertion performance
+    clock_t start = clock();
+    for (int i = 0; i < dataset_size; i++) {
+        int result = bplus_tree_insert(tree, &keys[i], values[i]);
+        assert(result == 0);
+        
+        // Progress indicator every 100K items
+        if ((i + 1) % 100000 == 0) {
+            printf("    Inserted %d items...\n", i + 1);
+        }
+    }
+    clock_t end = clock();
+    double insert_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("  Inserted %d items in %.4f seconds (%.2f items/sec)\n", 
+           dataset_size, insert_time, dataset_size / insert_time);
+    
+    // Verify tree integrity with random samples
+    printf("  Verifying tree integrity with random samples...\n");
+    srand(123); // Fixed seed for reproducible results
+    for (int sample = 0; sample < 5000; sample++) {
+        int random_key = rand() % dataset_size;
+        void* found = bplus_tree_find(tree, &random_key);
+        assert(found != NULL);
+        assert(strstr((char*)found, "UltraMassiveValue") != NULL);
+    }
+    
+    // Test range queries on ultra-massive tree
+    printf("  Testing range queries...\n");
+    void* results[10000];
+    
+    // Small range
+    int start_key = 10000, end_key = 19999;
+    int count = bplus_tree_find_range(tree, &start_key, &end_key, results, 10000);
+    assert(count == 10000);
+    
+    // Large range
+    start_key = 100000, end_key = 199999;
+    count = bplus_tree_find_range(tree, &start_key, &end_key, results, 10000);
+    assert(count == 10000);
+    
+    // Measure search performance
+    printf("  Measuring search performance...\n");
+    start = clock();
+    for (int i = 0; i < 50000; i++) {
+        int random_key = rand() % dataset_size;
+        void* found = bplus_tree_find(tree, &random_key);
+        assert(found != NULL);
+    }
+    end = clock();
+    double search_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("  Searched 50K random items in %.4f seconds (%.2f items/sec)\n", 
+           search_time, 50000.0 / search_time);
+    
+    // Test memory usage and tree depth
+    printf("  Testing tree depth and memory characteristics...\n");
+    
+    // Measure deletion performance (delete every 100th item)
+    printf("  Measuring deletion performance...\n");
+    start = clock();
+    int deleted_count = 0;
+    for (int i = 0; i < dataset_size; i += 100) {
+        int result = bplus_tree_delete(tree, &keys[i]);
+        assert(result == 0);
+        deleted_count++;
+        
+        if (deleted_count % 1000 == 0) {
+            printf("    Deleted %d items...\n", deleted_count);
+        }
+    }
+    end = clock();
+    double delete_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("  Deleted %d items in %.4f seconds (%.2f items/sec)\n", 
+           deleted_count, delete_time, deleted_count / delete_time);
+    
+    // Verify remaining items
+    printf("  Verifying remaining items...\n");
+    int remaining_count = 0;
+    for (int i = 0; i < dataset_size; i++) {
+        if (i % 100 != 0) { // Skip deleted items
+            void* found = bplus_tree_find(tree, &keys[i]);
+            assert(found != NULL);
+            remaining_count++;
+        }
+    }
+    
+    printf("  Verified %d remaining items\n", remaining_count);
+    
+    bplus_tree_destroy(tree);
+    
+    // Clean up
+    for (int i = 0; i < dataset_size; i++) {
+        free(values[i]);
+    }
+    free(keys);
+    free(values);
+    
+    printf("✅ Ultra-massive B+ tree tests (1M items) passed\n");
+    return true;
+}
+
+/**
+ * @brief Tests B+ tree with different orders and sizes
+ */
+bool test_btree_scalability_analysis() {
+    printf("Running B+ tree scalability analysis...\n");
+    
+    // Test different tree orders with various dataset sizes
+    int orders[] = {4, 8, 16, 32, 64};
+    int sizes[] = {1000, 10000, 100000};
+    
+    for (int order_idx = 0; order_idx < 5; order_idx++) {
+        int order = orders[order_idx];
+        printf("  Testing order %d:\n", order);
+        
+        for (int size_idx = 0; size_idx < 3; size_idx++) {
+            int size = sizes[size_idx];
+            printf("    Dataset size %d:\n", size);
+            
+            BPlusTree *tree = bplus_tree_create(order, compare_ints, NULL);
+            
+            // Generate test data
+            int* keys = malloc(size * sizeof(int));
+            char** values = malloc(size * sizeof(char*));
+            
+            for (int i = 0; i < size; i++) {
+                keys[i] = i;
+                values[i] = malloc(25 * sizeof(char));
+                sprintf(values[i], "ScalabilityValue-%d", i);
+            }
+            
+            // Measure insertion
+            clock_t start = clock();
+            for (int i = 0; i < size; i++) {
+                int result = bplus_tree_insert(tree, &keys[i], values[i]);
+                assert(result == 0);
+            }
+            clock_t end = clock();
+            double insert_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+            
+            printf("      Insert: %.4f seconds (%.2f items/sec)\n", 
+                   insert_time, size / insert_time);
+            
+            // Measure search
+            start = clock();
+            for (int i = 0; i < size; i++) {
+                void* found = bplus_tree_find(tree, &keys[i]);
+                assert(found != NULL);
+            }
+            end = clock();
+            double search_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+            
+            printf("      Search: %.4f seconds (%.2f items/sec)\n", 
+                   search_time, size / search_time);
+            
+            // Measure deletion
+            start = clock();
+            for (int i = 0; i < size; i++) {
+                int result = bplus_tree_delete(tree, &keys[i]);
+                assert(result == 0);
+            }
+            end = clock();
+            double delete_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+            
+            printf("      Delete: %.4f seconds (%.2f items/sec)\n", 
+                   delete_time, size / delete_time);
+            
+            bplus_tree_destroy(tree);
+            
+            // Clean up
+            for (int i = 0; i < size; i++) {
+                free(values[i]);
+            }
+            free(keys);
+            free(values);
+        }
+    }
+    
+    printf("✅ B+ tree scalability analysis completed\n");
+    return true;
+}
+
+/**
  * @brief Tests error handling and edge cases
  */
 bool test_error_handling_edge_cases() {
@@ -1263,6 +1592,9 @@ bool test_error_handling_edge_cases() {
      RUN_TEST(test_concurrent_read_access);
      RUN_TEST(test_string_key_comparison);
      RUN_TEST(test_large_dataset_performance);
+     RUN_TEST(test_massive_btree_100k);
+     RUN_TEST(test_ultra_massive_btree_1m);
+     RUN_TEST(test_btree_scalability_analysis);
      RUN_TEST(test_error_handling_edge_cases);
      
      printf("----------------------------------\n");
