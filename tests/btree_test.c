@@ -6,15 +6,44 @@
  */
 
  #include <stdio.h>
- #include <stdlib.h>
- #include <stdbool.h>
- #include <assert.h>
- #include <string.h>
- // #include <omp.h>  // OpenMP not available on macOS by default
+#include <stdlib.h>
+#include <stdbool.h>
+#include <assert.h>
+#include <string.h>
+#include <time.h>
+#include <limits.h>
+#include <pthread.h>
+// #include <omp.h>  // OpenMP not available on macOS by default
  
  // Include the B+ Tree header file
 #include "../btree.h"
 #include "test_utils.h"
+
+// Forward declarations for new test functions
+bool test_tree_structure_integrity();
+bool test_node_splitting_validation();
+bool test_deletion_rebalancing();
+bool test_concurrent_read_access();
+bool test_string_key_comparison();
+bool test_large_dataset_performance();
+bool test_error_handling_edge_cases();
+
+// Forward declarations for helper functions
+void* concurrent_read_worker(void* arg);
+
+// Structure for concurrent test data
+typedef struct {
+    BPlusTree *tree;
+    int start_idx;
+    int end_idx;
+    int** keys;
+    char** values;
+} ThreadData;
+
+// String comparison function
+int compare_strings(const void* a, const void* b) {
+    return strcmp((char*)a, (char*)b);
+}
  
  // --- Test Harness Setup ---
  
@@ -782,6 +811,424 @@ bool test_edge_cases() {
     return true;
 }
 
+// --- Advanced Test Categories ---
+
+/**
+ * @brief Tests tree structure integrity and balance
+ */
+bool test_tree_structure_integrity() {
+    printf("Running tree structure integrity tests...\n");
+    
+    // Test 1: Verify tree maintains proper structure after insertions
+    BPlusTree *tree = bplus_tree_create(4, compare_ints, NULL);
+    
+    // Create test data
+    int* keys[20];
+    char* values[20];
+    for (int i = 0; i < 20; i++) {
+        keys[i] = malloc(sizeof(int));
+        *keys[i] = i;
+        values[i] = malloc(20 * sizeof(char));
+        sprintf(values[i], "StructValue-%d", i);
+    }
+    
+    // Insert items to trigger node splitting
+    for (int i = 0; i < 20; i++) {
+        int result = bplus_tree_insert(tree, keys[i], values[i]);
+        assert(result == 0);
+    }
+    
+    // Verify all items can still be found
+    for (int i = 0; i < 20; i++) {
+        void* found = bplus_tree_find(tree, keys[i]);
+        assert(found != NULL);
+        assert(strcmp((char*)found, values[i]) == 0);
+    }
+    
+    // Test 2: Verify tree structure after deletions
+    for (int i = 5; i < 15; i++) {
+        int result = bplus_tree_delete(tree, keys[i]);
+        assert(result == 0);
+    }
+    
+    // Verify remaining items
+    for (int i = 0; i < 5; i++) {
+        void* found = bplus_tree_find(tree, keys[i]);
+        assert(found != NULL);
+    }
+    
+    for (int i = 15; i < 20; i++) {
+        void* found = bplus_tree_find(tree, keys[i]);
+        assert(found != NULL);
+    }
+    
+    // Verify deleted items are gone
+    for (int i = 5; i < 15; i++) {
+        void* found = bplus_tree_find(tree, keys[i]);
+        assert(found == NULL);
+    }
+    
+    bplus_tree_destroy(tree);
+    
+    // Clean up test data
+    for (int i = 0; i < 20; i++) {
+        free(keys[i]);
+        free(values[i]);
+    }
+    
+    printf("✅ Tree structure integrity tests passed\n");
+    return true;
+}
+
+/**
+ * @brief Tests node splitting validation
+ */
+bool test_node_splitting_validation() {
+    printf("Running node splitting validation tests...\n");
+    
+    // Test 1: Force node splitting with small order
+    BPlusTree *small_tree = bplus_tree_create(3, compare_ints, NULL);
+    
+    // Create test data
+    int* keys[10];
+    char* values[10];
+    for (int i = 0; i < 10; i++) {
+        keys[i] = malloc(sizeof(int));
+        *keys[i] = i;
+        values[i] = malloc(20 * sizeof(char));
+        sprintf(values[i], "SplitValue-%d", i);
+    }
+    
+    // Insert items to trigger splitting (order 3 means max 2 keys per leaf)
+    for (int i = 0; i < 10; i++) {
+        int result = bplus_tree_insert(small_tree, keys[i], values[i]);
+        assert(result == 0);
+    }
+    
+    // Verify all items are present after splitting
+    for (int i = 0; i < 10; i++) {
+        void* found = bplus_tree_find(small_tree, keys[i]);
+        assert(found != NULL);
+        assert(strcmp((char*)found, values[i]) == 0);
+    }
+    
+    bplus_tree_destroy(small_tree);
+    
+    // Test 2: Test splitting with larger order
+    BPlusTree *large_tree = bplus_tree_create(6, compare_ints, NULL);
+    
+    // Insert many items to trigger multiple splits
+    for (int i = 0; i < 50; i++) {
+        int result = bplus_tree_insert(large_tree, keys[i % 10], values[i % 10]);
+        if (i < 10) assert(result == 0); // First 10 should succeed
+        else assert(result == -1); // Duplicates should fail
+    }
+    
+    // Verify structure integrity
+    for (int i = 0; i < 10; i++) {
+        void* found = bplus_tree_find(large_tree, keys[i]);
+        assert(found != NULL);
+    }
+    
+    bplus_tree_destroy(large_tree);
+    
+    // Clean up test data
+    for (int i = 0; i < 10; i++) {
+        free(keys[i]);
+        free(values[i]);
+    }
+    
+    printf("✅ Node splitting validation tests passed\n");
+    return true;
+}
+
+/**
+ * @brief Tests advanced deletion and rebalancing
+ */
+bool test_deletion_rebalancing() {
+    printf("Running deletion rebalancing tests...\n");
+    
+    // Test 1: Create tree and delete items to trigger rebalancing
+    BPlusTree *tree = bplus_tree_create(4, compare_ints, NULL);
+    
+    // Create test data
+    int* keys[15];
+    char* values[15];
+    for (int i = 0; i < 15; i++) {
+        keys[i] = malloc(sizeof(int));
+        *keys[i] = i;
+        values[i] = malloc(20 * sizeof(char));
+        sprintf(values[i], "RebalanceValue-%d", i);
+    }
+    
+    // Insert items
+    for (int i = 0; i < 15; i++) {
+        int result = bplus_tree_insert(tree, keys[i], values[i]);
+        assert(result == 0);
+    }
+    
+    // Delete items in specific pattern to test rebalancing
+    int delete_pattern[] = {7, 3, 11, 1, 9, 5, 13};
+    for (int i = 0; i < 7; i++) {
+        int result = bplus_tree_delete(tree, keys[delete_pattern[i]]);
+        assert(result == 0);
+    }
+    
+    // Verify deleted items are gone
+    for (int i = 0; i < 7; i++) {
+        void* found = bplus_tree_find(tree, keys[delete_pattern[i]]);
+        assert(found == NULL);
+    }
+    
+    // Verify remaining items are still accessible
+    int remaining[] = {0, 2, 4, 6, 8, 10, 12, 14};
+    for (int i = 0; i < 8; i++) {
+        void* found = bplus_tree_find(tree, keys[remaining[i]]);
+        assert(found != NULL);
+    }
+    
+    bplus_tree_destroy(tree);
+    
+    // Clean up test data
+    for (int i = 0; i < 15; i++) {
+        free(keys[i]);
+        free(values[i]);
+    }
+    
+    printf("✅ Deletion rebalancing tests passed\n");
+    return true;
+}
+
+/**
+ * @brief Tests concurrent read access
+ */
+bool test_concurrent_read_access() {
+    printf("Running concurrent read access tests...\n");
+    
+    BPlusTree *tree = bplus_tree_create(4, compare_ints, NULL);
+    
+    // Create test data
+    int* keys[100];
+    char* values[100];
+    for (int i = 0; i < 100; i++) {
+        keys[i] = malloc(sizeof(int));
+        *keys[i] = i;
+        values[i] = malloc(20 * sizeof(char));
+        sprintf(values[i], "ConcurrentValue-%d", i);
+    }
+    
+    // Insert test data
+    for (int i = 0; i < 100; i++) {
+        bplus_tree_insert(tree, keys[i], values[i]);
+    }
+    
+    // Test concurrent reads
+    const int thread_count = 4;
+    pthread_t threads[thread_count];
+    
+    typedef struct {
+        BPlusTree *tree;
+        int start_idx;
+        int end_idx;
+        int* keys;
+        char** values;
+    } ThreadData;
+    
+    ThreadData thread_data[thread_count];
+    
+    for (int i = 0; i < thread_count; i++) {
+        thread_data[i].tree = tree;
+        thread_data[i].start_idx = i * 25;
+        thread_data[i].end_idx = (i + 1) * 25;
+        thread_data[i].keys = keys;
+        thread_data[i].values = values;
+        
+        int result = pthread_create(&threads[i], NULL, 
+            concurrent_read_worker, &thread_data[i]);
+        assert(result == 0);
+    }
+    
+    // Wait for all threads to complete
+    for (int i = 0; i < thread_count; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    
+    bplus_tree_destroy(tree);
+    
+    // Clean up test data
+    for (int i = 0; i < 100; i++) {
+        free(keys[i]);
+        free(values[i]);
+    }
+    
+    printf("✅ Concurrent read access tests passed\n");
+    return true;
+}
+
+/**
+ * @brief Worker function for concurrent read tests
+ */
+void* concurrent_read_worker(void* arg) {
+    ThreadData *data = (ThreadData*)arg;
+    
+    for (int i = data->start_idx; i < data->end_idx; i++) {
+        void* found = bplus_tree_find(data->tree, data->keys[i]);
+        assert(found != NULL);
+        assert(strcmp((char*)found, data->values[i]) == 0);
+    }
+    
+    return NULL;
+}
+
+/**
+ * @brief Tests string key comparison
+ */
+bool test_string_key_comparison() {
+    printf("Running string key comparison tests...\n");
+    
+    BPlusTree *tree = bplus_tree_create(4, compare_strings, NULL);
+    
+    // Create test data with string keys
+    char* keys[] = {"apple", "banana", "cherry", "date", "elderberry"};
+    char* values[] = {"red", "yellow", "red", "brown", "purple"};
+    
+    // Insert items
+    for (int i = 0; i < 5; i++) {
+        int result = bplus_tree_insert(tree, keys[i], values[i]);
+        assert(result == 0);
+    }
+    
+    // Test find operations
+    for (int i = 0; i < 5; i++) {
+        void* found = bplus_tree_find(tree, keys[i]);
+        assert(found != NULL);
+        assert(strcmp((char*)found, values[i]) == 0);
+    }
+    
+    // Test range query
+    void* results[5];
+    int count = bplus_tree_find_range(tree, "banana", "date", results, 5);
+    assert(count == 3); // banana, cherry, date
+    
+    bplus_tree_destroy(tree);
+    
+    printf("✅ String key comparison tests passed\n");
+    return true;
+}
+
+/**
+ * @brief Tests performance with large datasets
+ */
+bool test_large_dataset_performance() {
+    printf("Running large dataset performance tests...\n");
+    
+    BPlusTree *tree = bplus_tree_create(8, compare_ints, NULL);
+    
+    const int dataset_size = 1000;
+    int* keys = malloc(dataset_size * sizeof(int));
+    char** values = malloc(dataset_size * sizeof(char*));
+    
+    // Generate test data
+    for (int i = 0; i < dataset_size; i++) {
+        keys[i] = i;
+        values[i] = malloc(20 * sizeof(char));
+        sprintf(values[i], "PerfValue-%d", i);
+    }
+    
+    // Measure insertion performance
+    clock_t start = clock();
+    for (int i = 0; i < dataset_size; i++) {
+        int result = bplus_tree_insert(tree, &keys[i], values[i]);
+        assert(result == 0);
+    }
+    clock_t end = clock();
+    double insert_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("  Inserted %d items in %.4f seconds\n", dataset_size, insert_time);
+    
+    // Measure search performance
+    start = clock();
+    for (int i = 0; i < dataset_size; i++) {
+        void* found = bplus_tree_find(tree, &keys[i]);
+        assert(found != NULL);
+    }
+    end = clock();
+    double search_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("  Searched %d items in %.4f seconds\n", dataset_size, search_time);
+    
+    // Measure deletion performance
+    start = clock();
+    for (int i = 0; i < dataset_size; i++) {
+        int result = bplus_tree_delete(tree, &keys[i]);
+        assert(result == 0);
+    }
+    end = clock();
+    double delete_time = ((double)(end - start)) / CLOCKS_PER_SEC;
+    
+    printf("  Deleted %d items in %.4f seconds\n", dataset_size, delete_time);
+    
+    bplus_tree_destroy(tree);
+    
+    // Clean up
+    for (int i = 0; i < dataset_size; i++) {
+        free(values[i]);
+    }
+    free(keys);
+    free(values);
+    
+    printf("✅ Large dataset performance tests passed\n");
+    return true;
+}
+
+/**
+ * @brief Tests error handling and edge cases
+ */
+bool test_error_handling_edge_cases() {
+    printf("Running error handling edge cases tests...\n");
+    
+    // Test 1: Invalid tree creation
+    BPlusTree *invalid_tree = bplus_tree_create(2, compare_ints, NULL);
+    assert(invalid_tree == NULL); // Order < 3 should fail
+    
+    invalid_tree = bplus_tree_create(-1, compare_ints, NULL);
+    assert(invalid_tree == NULL); // Negative order should fail
+    
+    // Test 2: NULL operations
+    assert(bplus_tree_insert(NULL, NULL, NULL) == -1);
+    assert(bplus_tree_find(NULL, NULL) == NULL);
+    assert(bplus_tree_delete(NULL, NULL) == -1);
+    assert(bplus_tree_find_range(NULL, NULL, NULL, NULL, 0) == 0);
+    
+    // Test 3: Empty tree operations
+    BPlusTree *empty_tree = bplus_tree_create(4, compare_ints, NULL);
+    assert(bplus_tree_find(empty_tree, NULL) == NULL);
+    assert(bplus_tree_delete(empty_tree, NULL) == -1);
+    
+    // Test 4: Boundary conditions
+    int max_int = INT_MAX;
+    int min_int = INT_MIN;
+    char* max_value = "max";
+    char* min_value = "min";
+    
+    int result = bplus_tree_insert(empty_tree, &max_int, max_value);
+    assert(result == 0);
+    
+    result = bplus_tree_insert(empty_tree, &min_int, min_value);
+    assert(result == 0);
+    
+    void* found = bplus_tree_find(empty_tree, &max_int);
+    assert(found != NULL);
+    
+    found = bplus_tree_find(empty_tree, &min_int);
+    assert(found != NULL);
+    
+    bplus_tree_destroy(empty_tree);
+    
+    printf("✅ Error handling edge cases tests passed\n");
+    return true;
+}
+
 // --- Main Test Runner ---
  
  int main() {
@@ -808,6 +1255,15 @@ bool test_edge_cases() {
      RUN_TEST(test_delete_comprehensive);
      RUN_TEST(test_destroy_comprehensive);
      RUN_TEST(test_edge_cases);
+     
+     // Advanced test categories
+     RUN_TEST(test_tree_structure_integrity);
+     RUN_TEST(test_node_splitting_validation);
+     RUN_TEST(test_deletion_rebalancing);
+     RUN_TEST(test_concurrent_read_access);
+     RUN_TEST(test_string_key_comparison);
+     RUN_TEST(test_large_dataset_performance);
+     RUN_TEST(test_error_handling_edge_cases);
      
      printf("----------------------------------\n");
      printf("Test Results: %d Passed, %d Failed\n", tests_passed, tests_failed);
