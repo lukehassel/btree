@@ -5,6 +5,14 @@ CC = clang
 CFLAGS = -std=c11 -Wall -Wextra -O2 -g
 LDFLAGS = -lpthread
 
+# Platform-specific flags
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+# Ensure rwlock APIs are exposed on glibc and enable pthread at compile time
+CFLAGS += -D_XOPEN_SOURCE=700 -pthread
+LDFLAGS += -pthread
+endif
+
 # OpenMP flags for macOS with clang
 OPENMP_CFLAGS = -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
 OPENMP_LDFLAGS = -L/opt/homebrew/opt/libomp/lib -lomp
