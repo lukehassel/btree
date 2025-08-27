@@ -16,26 +16,21 @@ OBJDIR = obj
 
 # Source files
 BTREE_SRC = $(SRCDIR)/btree.c
-BTREE_SIMD_SRC = $(SRCDIR)/btree_simd.c
 TEST_UTILS_SRC = $(TESTDIR)/test_utils.c
 
 # Object files
 BTREE_OBJ = $(OBJDIR)/btree.o
-BTREE_SIMD_OBJ = $(OBJDIR)/btree_simd.o
 TEST_UTILS_OBJ = $(OBJDIR)/test_utils.o
 
 # Executables
 BTREE_TEST = $(TESTDIR)/btree_test
-BTREE_TEST_SIMD = $(TESTDIR)/btree_test_simd
-BTREE_SIMD_TEST = $(TESTDIR)/btree_simd_test
-BTREE_SIMD_VS_PTHREAD_TEST = $(TESTDIR)/btree_simd_vs_pthread_test
 
 BTREE_SIMPLE_PERF_TEST = $(TESTDIR)/btree_simple_performance_test
 BTREE_BASIC_PERF_TEST = $(TESTDIR)/btree_basic_performance_test
 BTREE_SAFE_PERF_TEST = $(TESTDIR)/btree_safe_performance_test
 
 # Default target
-all: $(BTREE_TEST) $(BTREE_TEST_SIMD) $(BTREE_SIMD_TEST)
+all: $(BTREE_TEST)
 
 # Create object directory
 $(OBJDIR):
@@ -49,10 +44,6 @@ $(BTREE_OBJ): $(BTREE_SRC) | $(OBJDIR)
 
 
 
-# Compile SIMD B+ tree
-$(BTREE_SIMD_OBJ): $(BTREE_SIMD_SRC) | $(OBJDIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
 # Compile test utilities
 $(TEST_UTILS_OBJ): $(TEST_UTILS_SRC) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -61,17 +52,7 @@ $(TEST_UTILS_OBJ): $(TEST_UTILS_SRC) | $(OBJDIR)
 $(BTREE_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_test.c $^ $(LDFLAGS)
 
-# Link SIMD variant of the unified test (btree_test.c) using SIMD implementation
-$(BTREE_TEST_SIMD): $(BTREE_SIMD_OBJ) $(BTREE_OBJ) $(TEST_UTILS_OBJ)
-	$(CC) $(CFLAGS) -DBTREE_USE_SIMD -o $@ $(TESTDIR)/btree_test.c $^ $(LDFLAGS)
-
-# Link SIMD test
-$(BTREE_SIMD_TEST): $(BTREE_SIMD_OBJ) $(BTREE_OBJ) $(TEST_UTILS_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_simd_test.c $^ $(LDFLAGS)
-
-# Link SIMD vs Pthread comparison test
-$(BTREE_SIMD_VS_PTHREAD_TEST): $(BTREE_SIMD_OBJ) $(BTREE_OBJ) $(TEST_UTILS_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_simd_vs_pthread_test.c $^ $(LDFLAGS)
+ 
 
 
 
@@ -94,12 +75,9 @@ $(BTREE_SAFE_PERF_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
 
 
 # Test targets
-test: $(BTREE_TEST) $(BTREE_TEST_SIMD)
+test: $(BTREE_TEST)
 	@echo "🧵 Testing pthread implementation..."
 	@$(BTREE_TEST)
-	@echo ""
-	@echo "🚀 Testing SIMD implementation (unified test suite)..."
-	@$(BTREE_TEST_SIMD)
 
 test-pthread: $(BTREE_TEST)
 	@echo "🧵 Testing pthread implementation..."
@@ -125,9 +103,7 @@ test-safe-performance: $(BTREE_SAFE_PERF_TEST)
 	@echo "🚀 Running safe performance test..."
 	@$(BTREE_SAFE_PERF_TEST)
 
-test-simd: $(BTREE_SIMD_TEST)
-	@echo "🚀 Running SIMD B+ Tree test..."
-	@$(BTREE_SIMD_TEST)
+ 
 
 test-simd-vs-pthread: $(BTREE_SIMD_VS_PTHREAD_TEST)
 	@echo "🚀 Running SIMD vs Pthread performance comparison..."
@@ -138,7 +114,7 @@ test-simd-vs-pthread: $(BTREE_SIMD_VS_PTHREAD_TEST)
 # Clean target
 clean:
 	rm -rf $(OBJDIR)
-	rm -f $(BTREE_TEST) $(BTREE_SIMD_TEST)
+	rm -f $(BTREE_TEST)
 	rm -rf $(TESTDIR)/*.dSYM
 	rm -f $(TESTDIR)/*.o
 
@@ -147,12 +123,10 @@ clean:
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all              - Build all implementations"
-	@echo "  test             - Test all implementations"
-	@echo "  test-pthread     - Test pthread implementation only"
-	@echo "  test-simd        - Test SIMD implementation only"
-	@echo "  test-performance - Run performance comparison"
+	@echo "  all              - Build"
+	@echo "  test             - Run pthread tests"
+	@echo "  test-pthread     - Run pthread tests"
 	@echo "  clean            - Remove build artifacts"
 	@echo "  help             - Show this help message"
 
-.PHONY: all test test-pthread test-simd test-performance clean help
+.PHONY: all test test-pthread clean help

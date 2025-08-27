@@ -1,10 +1,9 @@
-# 🚀 High-Performance B+ Tree Implementation
+# 🚀 High-Performance B+ Tree (pthread) Implementation
 
-A modern, optimized B+ Tree implementation in C with SIMD optimizations, designed for high-performance applications on macOS and other Unix-like systems.
+A robust, thread-safe B+ Tree implementation in C using pthread read-write locks for high concurrency on macOS and Linux.
 
 ## ✨ Features
 
-- **🚀 SIMD Optimizations**: Platform-specific SIMD instructions (ARM NEON for Apple Silicon, AVX2 for x86_64)
 - **🧵 Thread-Safe**: Pthread read-write locks for concurrent access
 - **⚡ High Performance**: Optimized algorithms with compiler auto-vectorization
 - **🔧 Generic Design**: Void pointer interface for flexible key/value types
@@ -16,27 +15,24 @@ A modern, optimized B+ Tree implementation in C with SIMD optimizations, designe
 
 ### Core Components
 
-- **`btree.c`** - Base pthread B+ Tree implementation
-- **`btree_simd.c`** - SIMD-optimized B+ Tree implementation
-- **`btree.h`** - Common header with shared structures and interfaces
-- **`btree_simd.h`** - SIMD-specific function declarations
+- **`btree.c`** - Pthread B+ Tree implementation
+- **`btree.h`** - Public API and shared structures
 
-### SIMD Optimizations
+### Concurrency
 
-- **Compiler Auto-Vectorization**: Uses `#pragma clang loop vectorize(enable)`
-- **Platform Detection**: Automatically detects and uses optimal SIMD instructions
-- **Smart Algorithm Selection**: Binary search for large arrays, SIMD for small operations
-- **Memory Access Patterns**: Optimized for cache locality
+- Reader/writer locks at node level for high read throughput
+- Lock coupling during descent to leaves
+- Safe concurrent finds with concurrent inserts/deletes
 
 ## 🚀 Performance
 
 ### Benchmark Results (1000 items)
 
-| Operation | Pthread | SIMD | Improvement |
-|-----------|---------|------|-------------|
-| Insertion | 2.9M items/sec | 3.1M items/sec | +7% |
-| Find | 10.4M items/sec | 11.2M items/sec | +8% |
-| Range Query | Both working | Both working | Comparable |
+| Operation | Pthread |
+|-----------|---------|
+| Insertion | ~2.9M items/sec |
+| Find | ~10.4M items/sec |
+| Range Query | Working |
 
 ### Large Dataset Performance
 
@@ -59,26 +55,22 @@ A modern, optimized B+ Tree implementation in C with SIMD optimizations, designe
 git clone <repository-url>
 cd ai-btree
 
-# Build all implementations
+# Build
 make all
 
 # Run tests
 make test
 
 # Run specific tests
-make test-pthread      # Pthread implementation only
-make test-simd         # SIMD implementation only
-make test-simd-vs-pthread  # Performance comparison
+make test-pthread
 ```
 
 ### Build Targets
 
 ```bash
-make all                    # Build all implementations
-make test                   # Run all tests
-make test-pthread          # Test pthread implementation
-make test-simd             # Test SIMD implementation
-make test-simd-vs-pthread  # Performance comparison
+make all                    # Build
+make test                   # Run pthread tests
+make test-pthread          # Run pthread tests
 make test-safe-performance # Safe performance tests
 make clean                 # Clean build artifacts
 make help                  # Show available targets
@@ -89,26 +81,61 @@ make help                  # Show available targets
 ### Basic Operations
 
 ```c
-#include "btree_simd.h"
+#include "btree.h"
 
-// Create a SIMD-optimized B+ Tree
-BPlusTree *tree = bplus_tree_create_simd(16, compare_ints, NULL);
+// Create a pthread-based B+ Tree
+BPlusTree *tree = bplus_tree_create(16, compare_ints, NULL);
 
 // Insert key-value pairs
 int key = 42;
 char *value = "hello";
-bplus_tree_insert_simd(tree, &key, value);
+bplus_tree_insert(tree, &key, value);
 
 // Find values
-void *found = bplus_tree_find_simd(tree, &key);
+void *found = bplus_tree_find(tree, &key);
 
 // Range queries
 void* results[100];
-int count = bplus_tree_find_range_simd(tree, &start_key, &end_key, results, 100);
+int count = bplus_tree_find_range(tree, &start_key, &end_key, results, 100);
 
 // Cleanup
-bplus_tree_destroy_simd(tree);
+bplus_tree_destroy(tree);
 ```
+
+### Quick Start (full)
+
+```c
+#include "btree.h"
+
+int main() {
+    BPlusTree *tree = bplus_tree_create(8, compare_ints, NULL);
+    int key = 123; char *val = strdup("example");
+    bplus_tree_insert(tree, &key, val);
+    char *found = bplus_tree_find(tree, &key);
+    if (found) printf("found: %s\n", found);
+    bplus_tree_delete(tree, &key);
+    bplus_tree_destroy(tree);
+    return 0;
+}
+```
+
+### Range Query Example
+
+```c
+// Assumes tree populated with integer keys
+int start = 100, end = 200;
+void *results[64];
+int n = bplus_tree_find_range(tree, &start, &end, results, 64);
+for (int i = 0; i < n; i++) {
+    printf("val[%d]=%s\n", i, (char*)results[i]);
+}
+```
+
+### Concurrency Pattern (Reads/Writes)
+
+- Reads use shared (RD) locks internally and can proceed concurrently.
+- Writes (insert/delete) take WR locks per node.
+- Multiple threads can call `find` safely alongside writers.
 
 ### Key Comparison Functions
 
@@ -127,6 +154,23 @@ int compare_strings(const void* a, const void* b) {
     return strcmp((char*)a, (char*)b);
 }
 ```
+
+### Memory Management Notes
+
+- If your values are heap-allocated and owned by the tree, pass a `destroy_value` function at create time (e.g., `free`).
+- If you manage values externally, pass `NULL` to avoid double frees.
+- Keys are not copied; store pointers with lifetimes that outlive tree operations.
+
+## 📘 API Reference
+
+Header `btree.h`:
+
+- `BPlusTree *bplus_tree_create(int order, key_comparator cmp, value_destroyer dtor)`
+- `int bplus_tree_insert(BPlusTree *t, void *key, void *value)`
+- `void *bplus_tree_find(BPlusTree *t, void *key)`
+- `int bplus_tree_find_range(BPlusTree *t, void *start_key, void *end_key, void **results, int max_results)`
+- `int bplus_tree_delete(BPlusTree *t, void *key)`
+- `void bplus_tree_destroy(BPlusTree *t)`
 
 ## 🧪 Testing
 

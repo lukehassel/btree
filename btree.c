@@ -34,7 +34,19 @@ void destroy_node_recursive(BPlusTree *tree, Node *node);
 
 // --- Utility Functions ---
 
-// Creates a new record to store a value pointer.
+/**
+ * Create a new record wrapper for a value pointer.
+ *
+ * Allocates a `Record` that holds the provided value pointer without copying
+ * or taking ownership semantics beyond eventual destruction via
+ * `tree->destroy_value` during node cleanup.
+ *
+ * Params:
+ * - value: Pointer to user data to be associated with a key inside a leaf.
+ *
+ * Returns:
+ * - Newly allocated `Record*` on success, or NULL on allocation failure.
+ */
 Record *make_record(void *value) {
     Record *new_record = (Record *)malloc(sizeof(Record));
     if (new_record != NULL) {
@@ -43,7 +55,23 @@ Record *make_record(void *value) {
     return new_record;
 }
 
-// Creates a new general node.
+/**
+ * Allocate and initialize a new B+ Tree node.
+ *
+ * The node arrays are allocated based on `tree->order`. The node is
+ * initialized as either an internal node or a leaf, with `num_keys = 0`,
+ * `parent = NULL`, and a valid pthread read-write lock.
+ *
+ * Concurrency:
+ * - The node's lock is initialized but not locked by this function.
+ *
+ * Params:
+ * - tree: The owning tree, used to size allocation based on order.
+ * - is_leaf: Whether the new node is a leaf.
+ *
+ * Returns:
+ * - Newly allocated `Node*` on success, or NULL on allocation failure.
+ */
 Node *make_node(BPlusTree *tree, bool is_leaf) {
     Node *new_node = (Node *)malloc(sizeof(Node));
     if (new_node == NULL) return NULL;
@@ -311,8 +339,24 @@ int bplus_tree_find_range(BPlusTree *tree, void* start_key, void* end_key, void*
 
 // --- 🛠️ Internal Helper Functions ---
 
-// Finds the appropriate leaf node for a given key, using lock coupling.
-// Locks the returned leaf with either a read or write lock.
+/**
+ * Descend the tree to find the target leaf for a key (lock coupling).
+ *
+ * Traverses from the root to the appropriate leaf while holding at most one
+ * node lock at a time (hand-over-hand). The returned leaf remains locked:
+ * - If write_lock is true: WR lock held on the leaf.
+ * - If write_lock is false: RD lock held on the leaf.
+ * Caller must unlock the returned leaf.
+ *
+ * Params:
+ * - tree: Target tree.
+ * - key: Search key guiding the descent.
+ * - write_lock: Whether to lock the leaf for write (true) or read (false).
+ *
+ * Returns:
+ * - Locked leaf `Node*` on success (never NULL for non-empty tree), or NULL
+ *   if tree is inconsistent.
+ */
 Node *find_leaf(BPlusTree *tree, void *key, bool write_lock) {
     Node *c = tree->root;
     
@@ -339,7 +383,16 @@ Node *find_leaf(BPlusTree *tree, void *key, bool write_lock) {
     return c;
 }
 
-// Recursively destroys a node and its children.
+/**
+ * Recursively destroy a subtree rooted at `node`.
+ *
+ * For leaf nodes, destroys each `Record` and applies `tree->destroy_value`
+ * when provided. For internal nodes, recurses into all child pointers.
+ * Always destroys the node's rwlock and frees arrays and the node itself.
+ *
+ * Concurrency:
+ * - Assumes no concurrent access during teardown.
+ */
 void destroy_node_recursive(BPlusTree *tree, Node *node) {
     if (node->is_leaf) {
         for (int i = 0; i < node->num_keys; i++) {
@@ -360,7 +413,21 @@ void destroy_node_recursive(BPlusTree *tree, Node *node) {
     free(node);
 }
 
-// Inserts a new key and pointer into a parent node.
+/**
+ * Insert a key and right child pointer into the parent of `left`.
+ *
+ * If the parent has space, performs an in-place insert under parent WR lock.
+ * Otherwise, splits the parent and propagates the insertion upward.
+ *
+ * Concurrency:
+ * - Acquires WR lock on parent. On split, the split helper manages locking.
+ *
+ * Params:
+ * - tree: The tree.
+ * - left: The left child node which already contains keys <= key.
+ * - key: Separator key promoted to the parent.
+ * - right: The new right sibling to be installed after `left`.
+ */
 void insert_into_parent(BPlusTree *tree, Node *left, void *key, Node *right) {
     Node *parent = left->parent;
 
@@ -391,7 +458,12 @@ void insert_into_parent(BPlusTree *tree, Node *left, void *key, Node *right) {
     }
 }
 
-// Creates a new root for the tree.
+/**
+ * Create a new root and attach `left` and `right` as children.
+ *
+ * Used when splitting the previous root. Initializes the new internal root,
+ * assigns first key, two child pointers, and updates parent links.
+ */
 void insert_into_new_root(BPlusTree *tree, Node *left, void *key, Node *right) {
     Node *root = make_node(tree, false);
     root->keys[0] = key;
@@ -404,7 +476,17 @@ void insert_into_new_root(BPlusTree *tree, Node *left, void *key, Node *right) {
     tree->root = root;
 }
 
-// Splits an internal node and inserts the new key and pointer.
+/**
+ * Split a full internal node and insert a promoted key and right child.
+ *
+ * Uses temporary arrays to construct the split layout, creates a new internal
+ * node (`new_node`), redistributes keys and child pointers, fixes parents,
+ * and then calls `insert_into_parent` with the middle key `k_prime`.
+ *
+ * Concurrency:
+ * - Assumes caller holds WR lock on `old_node`.
+ * - Acquires WR lock on `new_node` until redistribution completes.
+ */
 void insert_into_node_after_splitting(BPlusTree *tree, Node *old_node, int left_index, void *key, Node *right) {
     int order = tree->order;
     void **temp_keys = malloc(order * sizeof(void *));
@@ -459,7 +541,15 @@ void insert_into_node_after_splitting(BPlusTree *tree, Node *old_node, int left_
     pthread_rwlock_unlock(&old_node->lock);
 }
 
-// Removes an entry from a node.
+/**
+ * Remove a key and its associated record pointer from node `n`.
+ *
+ * Also frees the `Record` and invokes `tree->destroy_value` if provided.
+ * Compacts the key/pointer arrays and decrements `num_keys`.
+ *
+ * Complexity:
+ * - O(n) within the node due to shifting elements.
+ */
 void remove_entry_from_node(BPlusTree* tree, Node *n, void *key, void *pointer) {
     int i = 0;
     while (tree->compare(n->keys[i], key) != 0) {
@@ -477,6 +567,13 @@ void remove_entry_from_node(BPlusTree* tree, Node *n, void *key, void *pointer) 
     n->num_keys--;
 }
 
+/**
+ * Adjust the root after a deletion.
+ *
+ * If the root becomes empty and has a child, promotes the first child to be
+ * the new root. If the root is an empty leaf, the tree remains with an empty
+ * leaf root. Frees the old root if replaced.
+ */
 void adjust_root(BPlusTree *tree) {
     Node *root = tree->root;
     if (root->num_keys > 0) return;
@@ -496,7 +593,17 @@ void adjust_root(BPlusTree *tree) {
     free(root);
 }
 
-// Core deletion logic: rebalance the tree if a node becomes under-full.
+/**
+ * Core deletion path: remove entry and rebalance if underflow occurs.
+ *
+ * Removes the key/pointer from node `n`, adjusts root if needed, and checks
+ * min-key constraints. Full sibling borrowing/coalescing is noted as a
+ * placeholder here; current implementation unlocks and returns when underflow
+ * is detected.
+ *
+ * Concurrency:
+ * - Assumes caller holds WR lock on `n` (leaf or internal).
+ */
 void delete_entry(BPlusTree *tree, Node *n, void *key, void *pointer) {
     remove_entry_from_node(tree, n, key, pointer);
 
@@ -524,7 +631,12 @@ void delete_entry(BPlusTree *tree, Node *n, void *key, void *pointer) {
 
 // --- ✅ Main Function for Demonstration ---
 
-// Comparator for integer keys (passed as void*)
+/**
+ * Comparator for integer keys (void* pointers to int).
+ *
+ * Handles NULLs deterministically and compares two integers.
+ * Returns -1, 0, or 1 for a < b, a == b, a > b respectively.
+ */
 int compare_ints(const void* a, const void* b) {
     // Handle NULL pointers gracefully
     if (a == NULL && b == NULL) return 0;
@@ -538,7 +650,11 @@ int compare_ints(const void* a, const void* b) {
     return 0;
 }
 
-// Value destroyer for string values (which were malloc'd)
+/**
+ * Destroyer for heap-allocated string values.
+ *
+ * Expects `value` to be a `char*` obtained via malloc/calloc/realloc.
+ */
 void destroy_string_value(void* value) {
     free(value);
 }

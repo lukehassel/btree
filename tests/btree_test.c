@@ -15,19 +15,8 @@
 #include <pthread.h>
 // #include <omp.h>  // OpenMP not available on macOS by default
  
- // Include the B+ Tree header file
-#ifdef BTREE_USE_SIMD
-#include "../btree_simd.h"
-// Map generic API names to SIMD implementation
-#define bplus_tree_create       bplus_tree_create_simd
-#define bplus_tree_destroy      bplus_tree_destroy_simd
-#define bplus_tree_find         bplus_tree_find_simd
-#define bplus_tree_insert       bplus_tree_insert_simd
-#define bplus_tree_delete       bplus_tree_delete_simd
-#define bplus_tree_find_range   bplus_tree_find_range_simd
-#else
+ // Include the B+ Tree header file (pthread-only on stable branch)
 #include "../btree.h"
-#endif
 #include "test_utils.h"
 
 // Forward declarations for new test functions
