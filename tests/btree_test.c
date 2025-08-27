@@ -1767,12 +1767,19 @@ bool test_mixed_operations_1m() {
     const int dataset_size = 1000000;
     int* keys = malloc(dataset_size * sizeof(int));
     char** values = malloc(dataset_size * sizeof(char*));
+    // Track presence of original keys as we delete
+    bool* present = malloc(dataset_size * sizeof(bool));
+    // Track heap-allocated keys for new inserts so their pointers remain valid
+    const int total_new_keys = 10 * 1000; // 10 rounds * 1000 inserts
+    int** new_keys = malloc(total_new_keys * sizeof(int*));
+    int new_keys_count = 0;
     
     // Generate test data
     for (int i = 0; i < dataset_size; i++) {
         keys[i] = i;
         values[i] = malloc(30 * sizeof(char));
         sprintf(values[i], "MixedOpValue-%d", i);
+        present[i] = true;
     }
     
     printf("  Phase 1: Inserting %d items...\n", dataset_size);
@@ -1804,7 +1811,9 @@ bool test_mixed_operations_1m() {
         for (int i = 0; i < 10000; i++) {
             int random_key = rand() % dataset_size;
             void* found = bplus_tree_find(tree, &keys[random_key]);
-            assert(found != NULL);
+            if (present[random_key]) {
+                assert(found != NULL);
+            }
             operations_count++;
         }
         
@@ -1815,18 +1824,24 @@ bool test_mixed_operations_1m() {
                 int result = bplus_tree_delete(tree, &keys[delete_key]);
                 assert(result == 0);
                 operations_count++;
+                present[delete_key] = false;
             }
         }
         
         // Insert some new items
         for (int i = 0; i < 1000; i++) {
-            int new_key = dataset_size + round * 1000 + i;
+            int k = dataset_size + round * 1000 + i;
+            int* new_key_ptr = (int*)malloc(sizeof(int));
+            *new_key_ptr = k; // ensure stable key storage
             char* new_value = malloc(30 * sizeof(char));
-            sprintf(new_value, "NewMixedValue-%d", new_key);
-            
-            int result = bplus_tree_insert(tree, &new_key, new_value);
+            sprintf(new_value, "NewMixedValue-%d", k);
+
+            int result = bplus_tree_insert(tree, new_key_ptr, new_value);
             assert(result == 0);
             operations_count++;
+
+            // Track allocated key pointer for later free
+            new_keys[new_keys_count++] = new_key_ptr;
         }
         
         printf("    Completed round %d (%d operations)\n", round + 1, operations_count);
@@ -1856,8 +1871,14 @@ bool test_mixed_operations_1m() {
     for (int i = 0; i < dataset_size; i++) {
         free(values[i]);
     }
+    // Free heap-allocated keys used for mixed inserts
+    for (int i = 0; i < new_keys_count; i++) {
+        free(new_keys[i]);
+    }
+    free(new_keys);
     free(keys);
     free(values);
+    free(present);
     
     printf("✅ Mixed operations test on 1M items passed\n");
     return true;
