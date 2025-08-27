@@ -9,14 +9,7 @@
 #define BTREE_SIMD_H
 
 #include <stdbool.h>
-
-// Forward declarations
-typedef struct Node Node;
-typedef struct BPlusTree BPlusTree;
-
-// Function pointer types for key comparison and value destruction
-typedef int (*key_comparator)(const void*, const void*);
-typedef void (*value_destroyer)(void*);
+#include "btree.h" // Reuse common types, macros, and public structs
 
 // --- 🚀 Core API Functions ---
 
