@@ -1,5 +1,7 @@
 # 🚀 High-Performance B+ Tree (pthread) Implementation
 
+[![CI](https://github.com/lukehassel/btree/actions/workflows/ci.yml/badge.svg?branch=stable)](https://github.com/lukehassel/btree/actions/workflows/ci.yml)
+
 A robust, thread-safe B+ Tree implementation in C using pthread read-write locks for high concurrency on macOS and Linux.
 
 ## ✨ Features
