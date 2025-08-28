@@ -149,6 +149,11 @@ for (int i = 0; i < n; i++) {
 
 You can store `bson_t*` documents as values. Pass a destroyer that calls `bson_destroy` so the tree cleans up documents.
 
+Important: A B+ tree indexes by a single key. When you insert a `bson_t*` as the value, you must choose exactly one field to use as the B+ tree key. Queries by other BSON fields are not automatic; to "search by another field" you either:
+
+- Build a second B+ tree keyed by that other field (secondary index), or
+- Scan over a key range and filter each BSON document in user code.
+
 Build requirements:
 
 - Install mongo-c-driver (provides libbson). On macOS: `brew install mongo-c-driver`.
@@ -172,16 +177,19 @@ static bson_t* make_doc(int num, const char* name) {
 }
 
 int main() {
+    // Choose which BSON field is the index (key). Here we index by an integer field "number".
+    // Keys are stored separately from BSON docs. Values are full BSON docs.
     BPlusTree* tree = bplus_tree_create(DEFAULT_ORDER, compare_ints, destroy_bson_value);
 
     int *k1 = malloc(sizeof(int)), *k2 = malloc(sizeof(int));
-    *k1 = 1; *k2 = 2;
-    bson_t* d1 = make_doc(10, "alpha");
-    bson_t* d2 = make_doc(20, "bravo");
+    *k1 = 10; *k2 = 20; // keys derived from BSON field "number"
+    bson_t* d1 = make_doc(*k1, "alpha");
+    bson_t* d2 = make_doc(*k2, "bravo");
 
     bplus_tree_insert(tree, k1, d1);
     bplus_tree_insert(tree, k2, d2);
 
+    // Find by the indexed field only (here: number == 20)
     const bson_t* found = (const bson_t*)bplus_tree_find(tree, k2);
     // read a field
     bson_iter_t it; const char* name = NULL;
@@ -189,10 +197,10 @@ int main() {
         name = bson_iter_utf8(&it, NULL);
     }
 
-    // delete by key
+    // delete by key (again, only the indexed field)
     bplus_tree_delete(tree, k1);
 
-    // scan a range and "search by field" by filtering results
+    // scan a range and "search by other field" by filtering results in user code
     int start = 0, end = 10; void* results[16];
     int n = bplus_tree_find_range(tree, &start, &end, results, 16);
     for (int i = 0; i < n; i++) {
@@ -208,6 +216,27 @@ int main() {
     free(k1); free(k2);
     return 0;
 }
+```
+
+Indexing by a different BSON field (e.g., string field `name`):
+
+```c
+// Change the key type and comparator accordingly
+int compare_strings(const void* a, const void* b) { return strcmp((const char*)a, (const char*)b); }
+
+BPlusTree* by_name = bplus_tree_create(DEFAULT_ORDER, compare_strings, destroy_bson_value);
+
+// For each document, extract the name and use it as the key. Keep the full doc as the value.
+char* kA = strdup("alpha");
+char* kB = strdup("bravo");
+bson_t* dA = make_doc(1, kA);
+bson_t* dB = make_doc(2, kB);
+bplus_tree_insert(by_name, kA, dA);
+bplus_tree_insert(by_name, kB, dB);
+
+// Lookup by name
+const bson_t* f = bplus_tree_find(by_name, kB); // finds doc with name == "bravo"
+// Clean up (tree will destroy BSON via destroyer; free key strings if you're not handing ownership to tree)
 ```
 
 ## 📘 API Reference
