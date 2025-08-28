@@ -218,25 +218,67 @@ int main() {
 }
 ```
 
-Indexing by a different BSON field (e.g., string field `name`):
+Indexing by a different BSON field (e.g., string field `name`) – full example:
 
 ```c
-// Change the key type and comparator accordingly
-int compare_strings(const void* a, const void* b) { return strcmp((const char*)a, (const char*)b); }
+#include <bson/bson.h>
+#include <string.h>
+#include "btree.h"
 
-BPlusTree* by_name = bplus_tree_create(DEFAULT_ORDER, compare_strings, destroy_bson_value);
+static void destroy_bson_value(void* value) {
+    if (value) bson_destroy((bson_t*)value);
+}
 
-// For each document, extract the name and use it as the key. Keep the full doc as the value.
-char* kA = strdup("alpha");
-char* kB = strdup("bravo");
-bson_t* dA = make_doc(1, kA);
-bson_t* dB = make_doc(2, kB);
-bplus_tree_insert(by_name, kA, dA);
-bplus_tree_insert(by_name, kB, dB);
+static int compare_strings(const void* a, const void* b) {
+    return strcmp((const char*)a, (const char*)b);
+}
 
-// Lookup by name
-const bson_t* f = bplus_tree_find(by_name, kB); // finds doc with name == "bravo"
-// Clean up (tree will destroy BSON via destroyer; free key strings if you're not handing ownership to tree)
+static bson_t* make_doc(int number, const char* name) {
+    bson_t* d = bson_new();
+    BSON_APPEND_INT32(d, "number", number);
+    BSON_APPEND_UTF8(d, "name", name);
+    return d;
+}
+
+int main() {
+    // This tree indexes by the BSON string field "name"
+    BPlusTree* by_name = bplus_tree_create(DEFAULT_ORDER, compare_strings, destroy_bson_value);
+
+    // Keys are C strings (name). Values are full BSON documents
+    char* kAlpha = strdup("alpha");
+    char* kBravo = strdup("bravo");
+    bson_t* dAlpha = make_doc(1, kAlpha);
+    bson_t* dBravo = make_doc(2, kBravo);
+
+    bplus_tree_insert(by_name, kAlpha, dAlpha);
+    bplus_tree_insert(by_name, kBravo, dBravo);
+
+    // Find by the indexed field (name)
+    const bson_t* found = (const bson_t*)bplus_tree_find(by_name, kBravo);
+    // Optional: read another field from the found doc
+    bson_iter_t it; int number = -1;
+    if (found && bson_iter_init_find(&it, found, "number") && BSON_ITER_HOLDS_INT32(&it)) {
+        number = bson_iter_int32(&it);
+    }
+
+    // Delete by the indexed field
+    bplus_tree_delete(by_name, kAlpha);
+
+    // Range query over string keys (e.g., ["a", "c"]) and manual filtering
+    const char* start = "a"; const char* end = "c";
+    void* results[16];
+    int n = bplus_tree_find_range(by_name, (void*)start, (void*)end, results, 16);
+    for (int i = 0; i < n; i++) {
+        const bson_t* doc = (const bson_t*)results[i];
+        // process doc...
+    }
+
+    // Cleanup: tree frees BSON docs via destroyer; free string keys if you own them
+    bplus_tree_destroy(by_name);
+    free(kAlpha);
+    free(kBravo);
+    return 0;
+}
 ```
 
 ## 📘 API Reference
