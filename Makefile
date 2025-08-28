@@ -32,6 +32,7 @@ TEST_UTILS_OBJ = $(OBJDIR)/test_utils.o
 
 # Executables
 BTREE_TEST = $(TESTDIR)/btree_test
+BTREE_BSON_TEST = $(TESTDIR)/btree_bson_test
 
 BTREE_SIMPLE_PERF_TEST = $(TESTDIR)/btree_simple_performance_test
 BTREE_BASIC_PERF_TEST = $(TESTDIR)/btree_basic_performance_test
@@ -59,6 +60,29 @@ $(TEST_UTILS_OBJ): $(TEST_UTILS_SRC) | $(OBJDIR)
 # Link pthread test
 $(BTREE_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_test.c $^ $(LDFLAGS)
+
+# Link BSON value test (requires libbson)
+# Try pkg-config first; if not found, attempt common Homebrew paths
+PKGCONF_BSON_CFLAGS := $(shell pkg-config --cflags libbson-1.0 2>/dev/null)
+PKGCONF_BSON_LIBS := $(shell pkg-config --libs libbson-1.0 2>/dev/null)
+
+ifeq ($(PKGCONF_BSON_CFLAGS),)
+  # Fallback includes/libs (Homebrew/Mac)
+  BREW_BSON_PREFIX := $(shell brew --prefix mongo-c-driver 2>/dev/null)
+  ifneq ($(BREW_BSON_PREFIX),)
+    BSON_INC_FLAGS = -I$(BREW_BSON_PREFIX)/include/bson-2.1.0 -I$(BREW_BSON_PREFIX)/include
+    BSON_LIB_FLAGS = -L$(BREW_BSON_PREFIX)/lib -lbson2
+  else
+    BSON_INC_FLAGS = -I/opt/homebrew/include -I/usr/local/include -I/opt/homebrew/include/libbson-1.0 -I/usr/local/include/libbson-1.0
+    BSON_LIB_FLAGS = -L/opt/homebrew/lib -L/usr/local/lib -lbson-1.0
+  endif
+else
+  BSON_INC_FLAGS = $(PKGCONF_BSON_CFLAGS)
+  BSON_LIB_FLAGS = $(PKGCONF_BSON_LIBS)
+endif
+
+$(BTREE_BSON_TEST): $(BTREE_OBJ)
+	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -o $@ $(TESTDIR)/btree_bson_test.c $^ $(LDFLAGS) $(BSON_LIB_FLAGS)
 
  
 
@@ -90,6 +114,10 @@ test: $(BTREE_TEST)
 test-pthread: $(BTREE_TEST)
 	@echo "🧵 Testing pthread implementation..."
 	@$(BTREE_TEST)
+
+test-bson: $(BTREE_BSON_TEST)
+	@echo "🧪 Running BSON value tests..."
+	@$(BTREE_BSON_TEST)
 
 
 
@@ -123,6 +151,7 @@ test-simd-vs-pthread: $(BTREE_SIMD_VS_PTHREAD_TEST)
 clean:
 	rm -rf $(OBJDIR)
 	rm -f $(BTREE_TEST)
+	rm -f $(BTREE_BSON_TEST)
 	rm -rf $(TESTDIR)/*.dSYM
 	rm -f $(TESTDIR)/*.o
 
@@ -137,4 +166,4 @@ help:
 	@echo "  clean            - Remove build artifacts"
 	@echo "  help             - Show this help message"
 
-.PHONY: all test test-pthread clean help
+.PHONY: all test test-pthread test-bson clean help

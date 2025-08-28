@@ -2,12 +2,11 @@
 
 [![CI](https://github.com/lukehassel/btree/actions/workflows/ci.yml/badge.svg?branch=stable)](https://github.com/lukehassel/btree/actions/workflows/ci.yml)
 
-A robust, thread-safe B+ Tree implementation in C using pthread read-write locks for high concurrency on macOS and Linux.
+A robust, thread-safe B+ Tree implementation in C using pthread read-write locks for high concurrency.
 
 ## ✨ Features
 
 - **🧵 Thread-Safe**: Pthread read-write locks for concurrent access
-- **⚡ High Performance**: Optimized algorithms with compiler auto-vectorization
 - **🔧 Generic Design**: Void pointer interface for flexible key/value types
 - **📊 Comprehensive Testing**: Extensive test suite with performance benchmarks
 - **🔄 Range Queries**: Efficient range scan operations
@@ -139,29 +138,77 @@ for (int i = 0; i < n; i++) {
 - Writes (insert/delete) take WR locks per node.
 - Multiple threads can call `find` safely alongside writers.
 
-### Key Comparison Functions
-
-```c
-// Integer comparison
-int compare_ints(const void* a, const void* b) {
-    int int_a = *(int*)a;
-    int int_b = *(int*)b;
-    if (int_a < int_b) return -1;
-    if (int_a > int_b) return 1;
-    return 0;
-}
-
-// String comparison
-int compare_strings(const void* a, const void* b) {
-    return strcmp((char*)a, (char*)b);
-}
-```
 
 ### Memory Management Notes
 
 - If your values are heap-allocated and owned by the tree, pass a `destroy_value` function at create time (e.g., `free`).
 - If you manage values externally, pass `NULL` to avoid double frees.
 - Keys are not copied; store pointers with lifetimes that outlive tree operations.
+
+### Using BSON values (libbson)
+
+You can store `bson_t*` documents as values. Pass a destroyer that calls `bson_destroy` so the tree cleans up documents.
+
+Build requirements:
+
+- Install mongo-c-driver (provides libbson). On macOS: `brew install mongo-c-driver`.
+- Run the dedicated test target to verify setup: `make test-bson`.
+
+Minimal example:
+
+```c
+#include <bson/bson.h>
+#include "btree.h"
+
+static void destroy_bson_value(void* value) {
+    if (value) bson_destroy((bson_t*)value);
+}
+
+static bson_t* make_doc(int num, const char* name) {
+    bson_t* d = bson_new();
+    BSON_APPEND_INT32(d, "number", num);
+    BSON_APPEND_UTF8(d, "name", name);
+    return d;
+}
+
+int main() {
+    BPlusTree* tree = bplus_tree_create(DEFAULT_ORDER, compare_ints, destroy_bson_value);
+
+    int *k1 = malloc(sizeof(int)), *k2 = malloc(sizeof(int));
+    *k1 = 1; *k2 = 2;
+    bson_t* d1 = make_doc(10, "alpha");
+    bson_t* d2 = make_doc(20, "bravo");
+
+    bplus_tree_insert(tree, k1, d1);
+    bplus_tree_insert(tree, k2, d2);
+
+    const bson_t* found = (const bson_t*)bplus_tree_find(tree, k2);
+    // read a field
+    bson_iter_t it; const char* name = NULL;
+    if (bson_iter_init_find(&it, found, "name") && BSON_ITER_HOLDS_UTF8(&it)) {
+        name = bson_iter_utf8(&it, NULL);
+    }
+
+    // delete by key
+    bplus_tree_delete(tree, k1);
+
+    // scan a range and "search by field" by filtering results
+    int start = 0, end = 10; void* results[16];
+    int n = bplus_tree_find_range(tree, &start, &end, results, 16);
+    for (int i = 0; i < n; i++) {
+        const bson_t* doc = (const bson_t*)results[i];
+        if (bson_iter_init_find(&it, doc, "name") && BSON_ITER_HOLDS_UTF8(&it)) {
+            if (strcmp(bson_iter_utf8(&it, NULL), "bravo") == 0) {
+                // match
+            }
+        }
+    }
+
+    bplus_tree_destroy(tree);
+    free(k1); free(k2);
+    return 0;
+}
+```
 
 ## 📘 API Reference
 
@@ -189,14 +236,6 @@ Header `btree.h`:
 ```bash
 # Run all tests
 make test
-
-# Run specific test suites
-make test-simd
-make test-pthread
-make test-simd-vs-pthread
-
-# Performance testing
-make test-safe-performance
 ```
 
 ## 🔧 Configuration
@@ -204,14 +243,9 @@ make test-safe-performance
 ### Compiler Flags
 
 - **Optimization**: `-O2` for production, `-O0` for debugging
-- **SIMD Support**: Automatically detected and enabled
 - **Threading**: `-lpthread` for pthread support
 
-### Platform-Specific Optimizations
 
-- **Apple Silicon (ARM64)**: ARM NEON SIMD instructions
-- **Intel/AMD (x86_64)**: AVX2 SIMD instructions
-- **Fallback**: Scalar operations for unsupported platforms
 
 ## 📊 Performance Tuning
 
@@ -221,20 +255,6 @@ make test-safe-performance
 - **Large datasets**: Order 16-32 for reduced tree height
 - **Memory vs Speed**: Higher order = faster but more memory
 
-### SIMD Thresholds
-
-- **Minimum parallel size**: 1000 items for SIMD operations
-- **Chunk size**: 100 items for parallel processing
-- **Auto-vectorization**: Enabled for loops with 4+ iterations
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Compilation Errors**: Ensure C11 support and proper compiler flags
-2. **Performance Issues**: Check SIMD support and compiler optimizations
-3. **Memory Leaks**: Use `destroy_value` function for custom value types
-4. **Thread Safety**: Ensure proper locking when using concurrent access
 
 ### Debug Mode
 
@@ -262,36 +282,12 @@ make test
 - **C11 Standard**: Use modern C features
 - **Naming**: Snake_case for functions, PascalCase for types
 - **Documentation**: Comprehensive comments for public APIs
-- **Testing**: Maintain >90% test coverage
 
-## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
 
-- **SIMD Optimizations**: Leveraging modern CPU instruction sets
-- **Compiler Optimizations**: Clang auto-vectorization capabilities
-- **B+ Tree Research**: Academic papers and performance studies
-- **Open Source Community**: Tools and libraries that made this possible
 
-## 📈 Roadmap
 
-### Version 1.1
-- [ ] Additional SIMD optimizations
-- [ ] GPU acceleration support
-- [ ] Persistent storage capabilities
-
-### Version 1.2
-- [ ] Advanced indexing strategies
-- [ ] Compression algorithms
-- [ ] Distributed tree support
-
-### Version 2.0
-- [ ] Multi-language bindings
-- [ ] Cloud-native features
-- [ ] Advanced analytics integration
 
 ---
 
-**Built with ❤️ for high-performance computing**
