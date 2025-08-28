@@ -114,6 +114,114 @@ static void test_ordering_and_integrity() {
     bson_ll_destroy(l);
 }
 
+static void test_concurrent_writes_and_reads_multi() {
+    BsonLinkedList* l = bson_ll_create(destroy_bson);
+    assert(l);
+    const int threads = 4;
+    const int per = 500;
+    pthread_t w[threads], r[threads];
+    ThreadArgs wa[threads], ra[threads];
+    for (int t = 0; t < threads; t++) {
+        wa[t].l = l; wa[t].start = t * per; wa[t].end = (t + 1) * per;
+        ra[t].l = l; ra[t].start = t * per; ra[t].end = (t + 1) * per;
+        pthread_create(&w[t], NULL, writer_thread, &wa[t]);
+        pthread_create(&r[t], NULL, reader_thread, &ra[t]);
+    }
+    for (int t = 0; t < threads; t++) { pthread_join(w[t], NULL); pthread_join(r[t], NULL); }
+    assert(bson_ll_size(l) == (size_t)(threads * per));
+    // Spot check a few keys
+    for (int probe = 0; probe < threads * per; probe += per / 2) {
+        int k = probe;
+        const bson_t* f = bson_ll_find_first(l, match_number, &k);
+        assert(f != NULL);
+    }
+    bson_ll_destroy(l);
+}
+
+static void test_updates_and_deletes_patterns() {
+    BsonLinkedList* l = bson_ll_create(destroy_bson);
+    assert(l);
+    const int N = 2000;
+    for (int i = 0; i < N; i++) {
+        char nm[32]; sprintf(nm, "n-%d", i);
+        assert(bson_ll_push_back(l, make_doc(i, nm)) == 0);
+    }
+    // Update every 10th name to tagged
+    for (int i = 0; i < N; i += 10) {
+        int k = i; const char* tag = "tagged";
+        assert(bson_ll_update_first(l, match_number, &k, update_name, (void*)tag) == 0);
+    }
+    // Verify updates by sampling
+    for (int i = 0; i < N; i += 100) {
+        int k = i - (i % 10); if (k < 0) k = 0;
+        const bson_t* f = bson_ll_find_first(l, match_number, &k);
+        assert(f != NULL);
+        bson_iter_t it; assert(bson_iter_init_find(&it, f, "name"));
+        const char* name = bson_iter_utf8(&it, NULL);
+        if (k % 10 == 0) { assert(strcmp(name, "tagged") == 0); }
+    }
+    // Delete every 7th
+    int deleted = 0;
+    for (int i = 0; i < N; i += 7) {
+        int k = i; if (bson_ll_delete_first(l, match_number, &k) == 0) deleted++;
+    }
+    assert(bson_ll_size(l) == (size_t)(N - deleted));
+    // Ensure some deleted are truly gone
+    for (int i = 0; i < N; i += 70) {
+        int k = i - (i % 7); if (k < 0) k = 0;
+        if (k % 7 == 0) {
+            const bson_t* f = bson_ll_find_first(l, match_number, &k);
+            assert(f == NULL);
+        }
+    }
+    bson_ll_destroy(l);
+}
+
+static void test_head_tail_operations() {
+    BsonLinkedList* l = bson_ll_create(destroy_bson);
+    assert(l);
+    // Build via alternating front/back
+    for (int i = 0; i < 50; i++) {
+        if (i % 2 == 0) assert(bson_ll_push_front(l, make_doc(i, "f")) == 0);
+        else assert(bson_ll_push_back(l, make_doc(i, "b")) == 0);
+    }
+    // Delete current head and tail keys if present by searching extremes
+    // Head candidate: the most recently pushed_front with even 48 likely near head
+    int k = 48; bson_ll_delete_first(l, match_number, &k);
+    // Tail candidate: one of back-pushed odds, e.g., 49
+    k = 49; bson_ll_delete_first(l, match_number, &k);
+    // Size check
+    assert(bson_ll_size(l) == 48);
+    // Ensure deleted not found
+    k = 48; assert(bson_ll_find_first(l, match_number, &k) == NULL);
+    k = 49; assert(bson_ll_find_first(l, match_number, &k) == NULL);
+    bson_ll_destroy(l);
+}
+
+static void test_stability_under_contention_small() {
+    BsonLinkedList* l = bson_ll_create(destroy_bson);
+    assert(l);
+    // Interleave many operations
+    for (int round = 0; round < 100; round++) {
+        for (int i = 0; i < 50; i++) {
+            char nm[16]; sprintf(nm, "r%di%d", round, i);
+            bson_ll_push_back(l, make_doc(round * 1000 + i, nm));
+        }
+        for (int i = 0; i < 25; i++) {
+            int k = round * 1000 + i;
+            (void)bson_ll_delete_first(l, match_number, &k);
+        }
+        for (int i = 25; i < 50; i += 5) {
+            int k = round * 1000 + i; const char* nm = "upd";
+            (void)bson_ll_update_first(l, match_number, &k, update_name, (void*)nm);
+        }
+    }
+    // Sanity: some keys should exist and be updatable
+    int k = 1999; const bson_t* f = bson_ll_find_first(l, match_number, &k);
+    assert(f != NULL);
+    bson_ll_destroy(l);
+}
+
 int main() {
     printf("=== BSON Linked List tests ===\n");
     test_basic_crud();
@@ -121,6 +229,10 @@ int main() {
     test_memory_leak_sanity();
     test_edge_cases();
     test_ordering_and_integrity();
+    test_concurrent_writes_and_reads_multi();
+    test_updates_and_deletes_patterns();
+    test_head_tail_operations();
+    test_stability_under_contention_small();
     printf("All Linked List tests passed.\n");
     return 0;
 }
