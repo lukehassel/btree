@@ -77,6 +77,74 @@ make clean                 # Clean build artifacts
 make help                  # Show available targets
 ```
 
+## 💾 File Format & Serialization
+
+### Magic Number System
+
+Both B-tree and linked list implementations use a **magic number system** to identify file types and ensure data integrity. This allows you to distinguish between different data structure files and validate their format.
+
+#### Magic Numbers
+
+- **B-tree files**: `0x42545245` ("BTRE" in ASCII)
+- **Linked list files**: `0x4C4C4953` ("LLIS" in ASCII)
+
+#### File Format Structure
+
+**B-tree files** contain:
+```
+[BTreeHeader] [NodeHeader] [NodeData] [NodeHeader] [NodeData] ...
+```
+
+**Linked list files** contain:
+```
+[LListHeader] [LListNodeHeader] [NodeData] [LListNodeHeader] [NodeData] ...
+```
+
+#### Header Information
+
+Each file includes metadata such as:
+- **Magic number** for file type identification
+- **Version number** for format compatibility
+- **Record counts** and **checksums** for data integrity
+- **Node information** for reconstruction
+
+#### Usage Example
+
+```c
+#include "btree.h"
+#include "llist.h"
+
+// Save B-tree to file
+BPlusTree *tree = bplus_tree_create_with_serializers(16, compare_ints, NULL,
+                                                    serialize_int_key, deserialize_int_key,
+                                                    serialize_string_value, deserialize_string_value);
+// ... populate tree ...
+bplus_tree_save_to_file(tree, "data.btree");
+
+// Save linked list to file
+LinkedList *list = llist_create_with_serializer(NULL, serialize_int_data, deserialize_int_data);
+// ... populate list ...
+llist_save_to_file(list, "data.llist");
+
+// Load and automatically detect file type
+BPlusTree *loaded_tree = bplus_tree_load_from_file("data.btree", compare_ints, NULL,
+                                                  deserialize_int_key, deserialize_string_value);
+LinkedList *loaded_list = llist_load_from_file("data.llist", NULL, deserialize_int_data);
+```
+
+#### File Type Detection
+
+The system automatically detects file types when loading:
+- **B-tree files** are loaded with `bplus_tree_load_from_file()`
+- **Linked list files** are loaded with `llist_load_from_file()`
+- **Invalid files** (wrong magic number) will fail to load with an error
+
+#### Data Integrity
+
+- **Checksums** verify data hasn't been corrupted
+- **Version checking** ensures compatibility with future format changes
+- **Magic number validation** prevents loading wrong file types
+
 ## 📚 Usage
 
 ### Basic Operations

@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     'tests/btree/btree_basic_performance_test'
+relocations:     []
+...

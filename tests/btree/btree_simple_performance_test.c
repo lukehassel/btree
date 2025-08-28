@@ -14,7 +14,7 @@
 #include <pthread.h>
 
 // Include the pthread B+ Tree header file
-#include "../btree.h"
+#include "../../btree.h"
 #include "test_utils.h"
 
 // Forward declarations for test functions

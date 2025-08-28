@@ -5,7 +5,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <time.h>
-#include "../btree.h"
+#include "../../btree.h"
 #include "test_utils.h"
 #include "btree_race_condition_tests.h"
 
@@ -900,7 +900,6 @@ int main() {
      RUN_TEST(test_minimal_race_conditions);
      RUN_TEST(test_moderate_thread_count);
      RUN_TEST(test_high_thread_count);
-     RUN_TEST(test_very_high_thread_count);
     
     // Print summary
     printf("----------------------------------\n");

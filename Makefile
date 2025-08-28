@@ -36,6 +36,7 @@ TEST_UTILS_OBJ = $(OBJDIR)/test_utils.o
 BTREE_TEST = $(BTREETESTDIR)/btree_test
 BTREE_BSON_TEST = $(BTREETESTDIR)/btree_bson_test
 LLIST_TEST = $(LLISTTESTDIR)/llist_test
+SERIALIZATION_TEST = $(BTREETESTDIR)/serialization_test
 
 BTREE_SIMPLE_PERF_TEST = $(BTREETESTDIR)/btree_simple_performance_test
 BTREE_BASIC_PERF_TEST = $(BTREETESTDIR)/btree_basic_performance_test
@@ -62,8 +63,12 @@ $(TEST_UTILS_OBJ): $(TEST_UTILS_SRC) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Link pthread test
-$(BTREE_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
+$(BTREE_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ) $(LLIST_OBJ)
 	$(CC) $(CFLAGS) -o $@ $(BTREETESTDIR)/btree_test.c $^ $(LDFLAGS)
+
+# Link serialization test
+$(SERIALIZATION_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ) $(LLIST_OBJ)
+	$(CC) $(CFLAGS) -I. -o $@ $(BTREETESTDIR)/serialization_test.c $(BTREE_OBJ) $(TEST_UTILS_OBJ) $(LLIST_OBJ) $(LDFLAGS)
 
 # Link BSON value test (requires libbson)
 # Try pkg-config first; if not found, attempt common Homebrew paths
@@ -88,15 +93,15 @@ endif
 $(BTREE_BSON_TEST): $(BTREE_OBJ)
 	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -o $@ $(BTREETESTDIR)/btree_bson_test.c $^ $(LDFLAGS) $(BSON_LIB_FLAGS)
 
-# Linked list of BSON docs
+# Generic linked list
 LLIST_SRC = $(SRCDIR)/llist.c
 LLIST_OBJ = $(OBJDIR)/llist.o
 
 $(LLIST_OBJ): $(LLIST_SRC) | $(OBJDIR)
-	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(LLIST_TEST): $(LLIST_OBJ)
-	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -o $@ $(LLISTTESTDIR)/llist_test.c $^ $(LDFLAGS) $(BSON_LIB_FLAGS)
+	$(CC) $(CFLAGS) -o $@ $(LLISTTESTDIR)/llist_test.c $^ $(LDFLAGS)
 
  
 
@@ -127,6 +132,10 @@ $(BTREE_RACE_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
 test: $(BTREE_TEST)
 	@echo "🧵 Testing pthread implementation..."
 	@$(BTREE_TEST)
+
+test-serialization: $(SERIALIZATION_TEST)
+	@echo "💾 Testing serialization functionality..."
+	@$(SERIALIZATION_TEST)
 
 test-pthread: $(BTREE_TEST)
 	@echo "🧵 Testing pthread implementation..."
@@ -180,6 +189,7 @@ clean:
 	rm -f $(BTREE_TEST)
 	rm -f $(BTREE_BSON_TEST)
 	rm -f $(LLIST_TEST)
+	rm -f $(SERIALIZATION_TEST)
 	rm -rf $(TESTDIR)/*.dSYM
 	rm -f $(TESTDIR)/*.o
 	rm -f $(BTREETESTDIR)/*.o
@@ -193,7 +203,8 @@ help:
 	@echo "  all              - Build"
 	@echo "  test             - Run pthread tests"
 	@echo "  test-pthread     - Run pthread tests"
+	@echo "  test-serialization - Run serialization tests"
 	@echo "  clean            - Remove build artifacts"
 	@echo "  help             - Show this help message"
 
-.PHONY: all test test-pthread test-bson test-llist clean help
+.PHONY: all test test-pthread test-serialization test-bson test-llist clean help

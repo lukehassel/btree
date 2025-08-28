@@ -14,7 +14,7 @@
 #include <pthread.h>
 
 // Include the pthread B+ Tree header file
-#include "../btree.h"
+#include "../../btree.h"
 #include "test_utils.h"
 
 // Forward declarations for test functions
@@ -46,7 +46,7 @@ int tests_failed = 0;
  * @brief Tests basic tree operations with a small dataset.
  */
 bool test_basic_operations() {
-    BPlusTree *tree = bplus_tree_create(4, compare_ints, destroy_string_value);
+    BPlusTree *tree = bplus_tree_create(4, compare_ints, NULL);
     
     const int test_size = 100;
     int* keys = malloc(test_size * sizeof(int));
@@ -100,7 +100,7 @@ bool test_basic_operations() {
  * @brief Tests small-scale performance characteristics.
  */
 bool test_small_scale_performance() {
-    BPlusTree *tree = bplus_tree_create(8, compare_ints, destroy_string_value);
+    BPlusTree *tree = bplus_tree_create(8, compare_ints, NULL);
     
     const int test_size = 500;
     int* keys = malloc(test_size * sizeof(int));
@@ -152,7 +152,7 @@ bool test_small_scale_performance() {
  * @brief Tests tree integrity with various operations.
  */
 bool test_tree_integrity() {
-    BPlusTree *tree = bplus_tree_create(6, compare_ints, destroy_string_value);
+    BPlusTree *tree = bplus_tree_create(6, compare_ints, NULL);
     
     const int test_size = 200;
     int* keys = malloc(test_size * sizeof(int));

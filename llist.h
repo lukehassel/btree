@@ -1,45 +1,96 @@
-#ifndef BSON_LINKED_LIST_H
-#define BSON_LINKED_LIST_H
+#ifndef LLIST_H
+#define LLIST_H
 
-#include <stddef.h>
 #include <stdbool.h>
-#include <pthread.h>
-#include <bson/bson.h>
+#include <stdint.h>
 
-// Function pointer for destroying stored bson documents (e.g., bson_destroy)
-typedef void (*bson_value_destroyer)(void* value);
+// Serialization constants
+#define LLIST_MAGIC_NUMBER 0x4C4C4953  // "LLIS" in hex (32-bit compatible)
+#define LLIST_VERSION 1
+#define MAX_FILENAME_LENGTH 256
 
-typedef struct BsonListNode BsonListNode;
+// Forward declarations
+typedef struct LListNode LListNode;
+typedef struct LinkedList LinkedList;
 
-typedef struct BsonLinkedList {
-    BsonListNode* head;
-    BsonListNode* tail;
+// Serialization metadata structures
+typedef struct {
+    uint32_t magic;           // Magic number to identify file format
+    uint32_t version;         // Format version
+    uint32_t total_nodes;     // Total number of nodes
+    uint64_t checksum;        // Data integrity checksum
+} LListHeader;
+
+typedef struct {
+    uint32_t node_id;         // Unique node identifier
+    uint32_t next_id;         // Next node ID (0 for last node)
+    uint32_t data_size;       // Size of node data in bytes
+} LListNodeHeader;
+
+// Function pointer for destroying user-provided data
+typedef void (*data_destroyer)(void* data);
+
+// Function pointer for serializing data to binary format
+typedef size_t (*data_serializer)(const void* data, void* buffer, size_t buffer_size);
+
+// Function pointer for deserializing data from binary format
+typedef void* (*data_deserializer)(const void* buffer, size_t buffer_size);
+
+// Structure for a linked list node
+struct LListNode {
+    void *data;
+    LListNode *next;
+    uint32_t node_id; // Unique identifier for serialization
+};
+
+// Structure for the linked list itself
+struct LinkedList {
+    LListNode *head;
+    LListNode *tail;
     size_t size;
-    pthread_rwlock_t lock; // List-level RW lock
-    bson_value_destroyer destroy_doc; // called on each document when removed/destroyed
-} BsonLinkedList;
+    data_destroyer destroy_data;
+    data_serializer serialize_data;
+    data_deserializer deserialize_data;
+    uint32_t next_node_id; // Counter for unique node IDs
+};
 
-// Predicate and updater types
-typedef bool (*bson_matcher)(const bson_t* doc, void* ctx);
-typedef int (*bson_updater)(bson_t* doc, void* ctx);
+// Public API functions
+LinkedList *llist_create(data_destroyer destroy_data);
+LinkedList *llist_create_with_serializer(data_destroyer destroy_data,
+                                       data_serializer ser, data_deserializer deser);
+void llist_destroy(LinkedList *list);
 
-BsonLinkedList* bson_ll_create(bson_value_destroyer destroy_doc);
-void bson_ll_destroy(BsonLinkedList* list);
+// Basic operations
+int llist_append(LinkedList *list, void *data);
+int llist_prepend(LinkedList *list, void *data);
+int llist_insert_at(LinkedList *list, size_t index, void *data);
+void *llist_get_at(LinkedList *list, size_t index);
+int llist_remove_at(LinkedList *list, size_t index);
+void *llist_remove_first(LinkedList *list);
+void *llist_remove_last(LinkedList *list);
+size_t llist_size(LinkedList *list);
+bool llist_is_empty(LinkedList *list);
 
-int bson_ll_push_back(BsonLinkedList* list, bson_t* doc);
-int bson_ll_push_front(BsonLinkedList* list, bson_t* doc);
+// Search operations
+void *llist_find(LinkedList *list, const void *data, int (*compare)(const void*, const void*));
+int llist_index_of(LinkedList *list, const void *data, int (*compare)(const void*, const void*));
 
-// Returns the first matching document pointer (do not free); NULL if not found
-const bson_t* bson_ll_find_first(BsonLinkedList* list, bson_matcher match, void* ctx);
+// Serialization functions
+int llist_save_to_file(LinkedList *list, const char *filename);
+LinkedList *llist_load_from_file(const char *filename, data_destroyer destroy_data,
+                               data_deserializer deser);
 
-// Deletes the first matching document; returns 0 if deleted, -1 if not found
-int bson_ll_delete_first(BsonLinkedList* list, bson_matcher match, void* ctx);
+// Utility functions
+void llist_print(LinkedList *list, void (*print_func)(const void*));
+LinkedList *llist_reverse(LinkedList *list);
+LinkedList *llist_copy(LinkedList *list, void* (*copy_func)(const void*));
 
-// Updates the first matching document using updater; updater should modify in place; returns 0 on success, -1 if not found or updater fails
-int bson_ll_update_first(BsonLinkedList* list, bson_matcher match, void* mctx, bson_updater update, void* uctx);
+// Built-in serializers for common types
+size_t serialize_int_data(const void* data, void* buffer, size_t buffer_size);
+void* deserialize_int_data(const void* buffer, size_t buffer_size);
+size_t serialize_string_data(const void* data, void* buffer, size_t buffer_size);
+void* deserialize_string_data(const void* buffer, size_t buffer_size);
 
-size_t bson_ll_size(BsonLinkedList* list);
-
-#endif // BSON_LINKED_LIST_H
+#endif // LLIST_H
 
 
