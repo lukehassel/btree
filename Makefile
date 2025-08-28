@@ -37,9 +37,10 @@ BTREE_TEST = $(BTREETESTDIR)/btree_test
 BTREE_BSON_TEST = $(BTREETESTDIR)/btree_bson_test
 LLIST_TEST = $(LLISTTESTDIR)/llist_test
 
-BTREE_SIMPLE_PERF_TEST = $(TESTDIR)/btree_simple_performance_test
-BTREE_BASIC_PERF_TEST = $(TESTDIR)/btree_basic_performance_test
-BTREE_SAFE_PERF_TEST = $(TESTDIR)/btree_safe_performance_test
+BTREE_SIMPLE_PERF_TEST = $(BTREETESTDIR)/btree_simple_performance_test
+BTREE_BASIC_PERF_TEST = $(BTREETESTDIR)/btree_basic_performance_test
+BTREE_SAFE_PERF_TEST = $(BTREETESTDIR)/btree_safe_performance_test
+BTREE_RACE_TEST = $(BTREETESTDIR)/btree_race_condition_tests
 
 # Default target
 all: $(BTREE_TEST)
@@ -105,15 +106,18 @@ $(LLIST_TEST): $(LLIST_OBJ)
 
 # Link simple performance test
 $(BTREE_SIMPLE_PERF_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_simple_performance_test.c $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(BTREETESTDIR)/btree_simple_performance_test.c $^ $(LDFLAGS)
 
 # Link basic performance test
 $(BTREE_BASIC_PERF_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_basic_performance_test.c $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(BTREETESTDIR)/btree_basic_performance_test.c $^ $(LDFLAGS)
 
 # Link safe performance test
 $(BTREE_SAFE_PERF_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_safe_performance_test.c $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(BTREETESTDIR)/btree_safe_performance_test.c $^ $(LDFLAGS)
+
+$(BTREE_RACE_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
+	$(CC) $(CFLAGS) -o $@ $(BTREETESTDIR)/btree_race_condition_tests.c $^ $(LDFLAGS)
 
 
 
@@ -154,6 +158,12 @@ test-basic-performance: $(BTREE_BASIC_PERF_TEST)
 
 test-safe-performance: $(BTREE_SAFE_PERF_TEST)
 	@echo "🚀 Running safe performance test..."
+	@$(BTREE_SAFE_PERF_TEST)
+
+test-btree-all: $(BTREE_TEST) $(BTREE_BSON_TEST) $(BTREE_SAFE_PERF_TEST)
+	@echo "🧪 Running ALL B+ tree tests..."
+	@$(BTREE_TEST)
+	@$(BTREE_BSON_TEST)
 	@$(BTREE_SAFE_PERF_TEST)
 
  
