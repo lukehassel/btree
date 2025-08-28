@@ -222,6 +222,85 @@ static void test_stability_under_contention_small() {
     bson_ll_destroy(l);
 }
 
+typedef struct { BsonLinkedList* l; int start; int end; int modulo; const char* name; } UpdateArgs;
+static void* updater_thread(void* arg) {
+    UpdateArgs* ua = (UpdateArgs*)arg;
+    for (int i = ua->start; i < ua->end; i++) {
+        if (ua->modulo <= 0 || (i % ua->modulo) == 0) {
+            int k = i; (void)bson_ll_update_first(ua->l, match_number, &k, update_name, (void*)ua->name);
+        }
+    }
+    return NULL;
+}
+
+typedef struct { BsonLinkedList* l; int start; int end; int step; } DeleteArgs;
+static void* deleter_thread(void* arg) {
+    DeleteArgs* da = (DeleteArgs*)arg;
+    for (int i = da->start; i < da->end; i += (da->step > 0 ? da->step : 1)) {
+        int k = i; (void)bson_ll_delete_first(da->l, match_number, &k);
+    }
+    return NULL;
+}
+
+static void test_parallel_updates() {
+    BsonLinkedList* l = bson_ll_create(destroy_bson);
+    assert(l);
+    const int N = 5000;
+    for (int i = 0; i < N; i++) { char nm[16]; sprintf(nm, "n%d", i); bson_ll_push_back(l, make_doc(i, nm)); }
+    pthread_t t1, t2, t3;
+    UpdateArgs a1 = { l, 0, N, 2, "even" };
+    UpdateArgs a2 = { l, 0, N, 3, "mod3" };
+    UpdateArgs a3 = { l, 0, N, 5, "mod5" };
+    pthread_create(&t1, NULL, updater_thread, &a1);
+    pthread_create(&t2, NULL, updater_thread, &a2);
+    pthread_create(&t3, NULL, updater_thread, &a3);
+    pthread_join(t1, NULL); pthread_join(t2, NULL); pthread_join(t3, NULL);
+    // Spot-check tags applied
+    for (int i = 0; i < 100; i += 10) {
+        int k = i; const bson_t* f = bson_ll_find_first(l, match_number, &k); assert(f);
+        bson_iter_t it; assert(bson_iter_init_find(&it, f, "name"));
+        const char* nm = bson_iter_utf8(&it, NULL);
+        if (i % 2 == 0) assert(strcmp(nm, "even") == 0 || strcmp(nm, "mod3") == 0 || strcmp(nm, "mod5") == 0);
+    }
+    bson_ll_destroy(l);
+}
+
+static void test_parallel_deletes_sized() {
+    BsonLinkedList* l = bson_ll_create(destroy_bson);
+    assert(l);
+    const int N = 10000;
+    for (int i = 0; i < N; i++) { bson_ll_push_back(l, make_doc(i, "x")); }
+    pthread_t d1, d2, d3;
+    DeleteArgs da1 = { l, 0, N, 2 };   // delete evens
+    DeleteArgs da2 = { l, 1, N, 4 };   // delete some odds
+    DeleteArgs da3 = { l, 3, N, 6 };   // delete another subset
+    pthread_create(&d1, NULL, deleter_thread, &da1);
+    pthread_create(&d2, NULL, deleter_thread, &da2);
+    pthread_create(&d3, NULL, deleter_thread, &da3);
+    pthread_join(d1, NULL); pthread_join(d2, NULL); pthread_join(d3, NULL);
+    size_t sz = bson_ll_size(l);
+    assert(sz <= (size_t)N);
+    // Ensure an even number key is gone and a non-deleted residue likely exists
+    int k = 100; assert(bson_ll_find_first(l, match_number, &k) == NULL);
+    k = 101; (void)bson_ll_find_first(l, match_number, &k); // may or may not exist, but API stable
+    bson_ll_destroy(l);
+}
+
+static void test_large_scale_stress() {
+    BsonLinkedList* l = bson_ll_create(destroy_bson);
+    assert(l);
+    const int N = 50000;
+    for (int i = 0; i < N; i++) { if (i % 2) bson_ll_push_front(l, make_doc(i, "f")); else bson_ll_push_back(l, make_doc(i, "b")); }
+    // Random-ish updates and deletes
+    for (int i = 0; i < N; i += 97) { int k = i; (void)bson_ll_update_first(l, match_number, &k, update_name, (void*)"U"); }
+    for (int i = 0; i < N; i += 113) { int k = i; (void)bson_ll_delete_first(l, match_number, &k); }
+    // Sanity probes
+    for (int probe = 0; probe < 2000; probe += 137) { int k = probe; (void)bson_ll_find_first(l, match_number, &k); }
+    size_t sz = bson_ll_size(l);
+    assert(sz <= (size_t)N);
+    bson_ll_destroy(l);
+}
+
 int main() {
     printf("=== BSON Linked List tests ===\n");
     test_basic_crud();
@@ -233,6 +312,9 @@ int main() {
     test_updates_and_deletes_patterns();
     test_head_tail_operations();
     test_stability_under_contention_small();
+    test_parallel_updates();
+    test_parallel_deletes_sized();
+    test_large_scale_stress();
     printf("All Linked List tests passed.\n");
     return 0;
 }
