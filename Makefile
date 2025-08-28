@@ -20,20 +20,22 @@ OPENMP_LDFLAGS = -L/opt/homebrew/opt/libomp/lib -lomp
 # Directories
 SRCDIR = .
 TESTDIR = tests
+BTREETESTDIR = $(TESTDIR)/btree
+LLISTTESTDIR = $(TESTDIR)/llist
 OBJDIR = obj
 
 # Source files
 BTREE_SRC = $(SRCDIR)/btree.c
-TEST_UTILS_SRC = $(TESTDIR)/test_utils.c
+TEST_UTILS_SRC = $(BTREETESTDIR)/test_utils.c
 
 # Object files
 BTREE_OBJ = $(OBJDIR)/btree.o
 TEST_UTILS_OBJ = $(OBJDIR)/test_utils.o
 
 # Executables
-BTREE_TEST = $(TESTDIR)/btree_test
-BTREE_BSON_TEST = $(TESTDIR)/btree_bson_test
-LLIST_TEST = $(TESTDIR)/llist_test
+BTREE_TEST = $(BTREETESTDIR)/btree_test
+BTREE_BSON_TEST = $(BTREETESTDIR)/btree_bson_test
+LLIST_TEST = $(LLISTTESTDIR)/llist_test
 
 BTREE_SIMPLE_PERF_TEST = $(TESTDIR)/btree_simple_performance_test
 BTREE_BASIC_PERF_TEST = $(TESTDIR)/btree_basic_performance_test
@@ -60,7 +62,7 @@ $(TEST_UTILS_OBJ): $(TEST_UTILS_SRC) | $(OBJDIR)
 
 # Link pthread test
 $(BTREE_TEST): $(BTREE_OBJ) $(TEST_UTILS_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(TESTDIR)/btree_test.c $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(BTREETESTDIR)/btree_test.c $^ $(LDFLAGS)
 
 # Link BSON value test (requires libbson)
 # Try pkg-config first; if not found, attempt common Homebrew paths
@@ -83,7 +85,7 @@ else
 endif
 
 $(BTREE_BSON_TEST): $(BTREE_OBJ)
-	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -o $@ $(TESTDIR)/btree_bson_test.c $^ $(LDFLAGS) $(BSON_LIB_FLAGS)
+	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -o $@ $(BTREETESTDIR)/btree_bson_test.c $^ $(LDFLAGS) $(BSON_LIB_FLAGS)
 
 # Linked list of BSON docs
 LLIST_SRC = $(SRCDIR)/llist.c
@@ -93,7 +95,7 @@ $(LLIST_OBJ): $(LLIST_SRC) | $(OBJDIR)
 	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -c $< -o $@
 
 $(LLIST_TEST): $(LLIST_OBJ)
-	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -o $@ $(TESTDIR)/llist_test.c $^ $(LDFLAGS) $(BSON_LIB_FLAGS)
+	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -o $@ $(LLISTTESTDIR)/llist_test.c $^ $(LDFLAGS) $(BSON_LIB_FLAGS)
 
  
 
@@ -170,6 +172,8 @@ clean:
 	rm -f $(LLIST_TEST)
 	rm -rf $(TESTDIR)/*.dSYM
 	rm -f $(TESTDIR)/*.o
+	rm -f $(BTREETESTDIR)/*.o
+	rm -f $(LLISTTESTDIR)/*.o
 
 
 
