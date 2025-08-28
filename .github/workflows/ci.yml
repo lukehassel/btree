@@ -30,9 +30,13 @@ jobs:
         run: |
           make all
 
-      - name: Run B+ tree tests
+      - name: Run B+ tree core tests
         run: |
-          make test-btree-all
+          make test-pthread
+
+      - name: Run B+ tree BSON tests
+        run: |
+          make test-bson
 
       - name: Run Linked List tests
         run: |
