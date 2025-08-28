@@ -33,6 +33,7 @@ TEST_UTILS_OBJ = $(OBJDIR)/test_utils.o
 # Executables
 BTREE_TEST = $(TESTDIR)/btree_test
 BTREE_BSON_TEST = $(TESTDIR)/btree_bson_test
+LLIST_TEST = $(TESTDIR)/llist_test
 
 BTREE_SIMPLE_PERF_TEST = $(TESTDIR)/btree_simple_performance_test
 BTREE_BASIC_PERF_TEST = $(TESTDIR)/btree_basic_performance_test
@@ -84,6 +85,16 @@ endif
 $(BTREE_BSON_TEST): $(BTREE_OBJ)
 	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -o $@ $(TESTDIR)/btree_bson_test.c $^ $(LDFLAGS) $(BSON_LIB_FLAGS)
 
+# Linked list of BSON docs
+LLIST_SRC = $(SRCDIR)/llist.c
+LLIST_OBJ = $(OBJDIR)/llist.o
+
+$(LLIST_OBJ): $(LLIST_SRC) | $(OBJDIR)
+	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -c $< -o $@
+
+$(LLIST_TEST): $(LLIST_OBJ)
+	$(CC) $(CFLAGS) $(BSON_INC_FLAGS) -o $@ $(TESTDIR)/llist_test.c $^ $(LDFLAGS) $(BSON_LIB_FLAGS)
+
  
 
 
@@ -119,6 +130,10 @@ test-bson: $(BTREE_BSON_TEST)
 	@echo "🧪 Running BSON value tests..."
 	@$(BTREE_BSON_TEST)
 
+test-llist: $(LLIST_TEST)
+	@echo "🧪 Running BSON Linked List tests..."
+	@$(LLIST_TEST)
+
 
 
 test-both: test
@@ -152,6 +167,7 @@ clean:
 	rm -rf $(OBJDIR)
 	rm -f $(BTREE_TEST)
 	rm -f $(BTREE_BSON_TEST)
+	rm -f $(LLIST_TEST)
 	rm -rf $(TESTDIR)/*.dSYM
 	rm -f $(TESTDIR)/*.o
 
@@ -166,4 +182,4 @@ help:
 	@echo "  clean            - Remove build artifacts"
 	@echo "  help             - Show this help message"
 
-.PHONY: all test test-pthread test-bson clean help
+.PHONY: all test test-pthread test-bson test-llist clean help
